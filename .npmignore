@@ -1,0 +1,26 @@
+# Source files (include src for source maps)
+tests/
+examples/
+scripts/
+
+# Config files
+.github/
+.changeset/
+tsconfig.json
+biome.json
+tsup.config.ts
+vitest.config.ts
+.size-limit.json
+
+# Environment
+.env
+.env.*
+
+# Development
+*.log
+coverage/
+.vscode/
+.idea/
+
+# Build artifacts (keep dist)
+*.tsbuildinfo

@@ -1,0 +1,84 @@
+{
+  "name": "@onevizion/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the OneVizion API with React hooks for TanStack Query integration",
+  "keywords": ["onevizion", "api", "sdk", "typescript", "react", "tanstack-query"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onevizion/onevizion-javascript.git"
+  },
+  "license": "MIT",
+  "author": "OneVizion",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react.js",
+      "require": "./dist/react.cjs",
+      "types": "./dist/react.d.ts"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:ui": "vitest --ui",
+    "generate:types": "node scripts/generate-types.js",
+    "size": "size-limit",
+    "prepublishOnly": "npm run build",
+    "release": "changeset publish"
+  },
+  "dependencies": {
+    "ky": "^1.7.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.27.10",
+    "@size-limit/preset-small-lib": "^11.1.6",
+    "@tanstack/react-query": "^5.59.0",
+    "@testing-library/react": "^16.0.1",
+    "@types/node": "^22.7.7",
+    "@types/react": "^18.3.11",
+    "@vitest/coverage-v8": "^2.1.3",
+    "@vitest/ui": "^2.1.3",
+    "happy-dom": "^15.7.4",
+    "openapi-typescript": "^7.4.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "size-limit": "^11.1.6",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

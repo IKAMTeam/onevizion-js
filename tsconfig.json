@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    // Strictest possible TypeScript configuration
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    // Module resolution
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+
+    // Emit
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": true,
+
+    // Interop
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+
+    // Quality
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+
+    // Paths
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "exclude": ["node_modules", "dist", "examples"]
+}

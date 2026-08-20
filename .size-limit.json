@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Core SDK",
+    "path": "dist/index.js",
+    "limit": "50 KB"
+  },
+  {
+    "name": "React Hooks",
+    "path": "dist/react.js",
+    "limit": "20 KB"
+  }
+]
