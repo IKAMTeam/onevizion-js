@@ -1,5 +1,9 @@
-import ky, { type KyInstance, type Options as KyOptions } from 'ky';
-import type { AuthProvider, OneVizionConfig } from '../types/index.js';
+import type {
+  AuthProvider,
+  OneVizionConfig,
+  RequestInterceptor,
+  ResponseInterceptor,
+} from '../types/index.js';
 import {
   AuthenticationError,
   NetworkError,
@@ -11,156 +15,243 @@ import {
 } from './errors.js';
 import { mergeRetryConfig, withRetry } from './retry.js';
 
+/**
+ * Lightweight HTTP client built on native fetch
+ *
+ * No external dependencies - just 2KB of pure fetch wrapper
+ */
 export class HttpClient {
-  private readonly ky: KyInstance;
+  private readonly baseUrl: string;
   private readonly auth: AuthProvider;
+  private readonly timeout: number;
   private readonly retryConfig: ReturnType<typeof mergeRetryConfig>;
+  private readonly requestInterceptors: RequestInterceptor[];
+  private readonly responseInterceptors: ResponseInterceptor[];
 
   constructor(config: OneVizionConfig) {
+    this.baseUrl = `${config.baseUrl}/api`;
     this.auth = config.auth;
+    this.timeout = config.timeout ?? 30000;
     this.retryConfig = mergeRetryConfig(config.retry);
-
-    const kyOptions: KyOptions = {
-      prefixUrl: `${config.baseUrl}/api`,
-      timeout: config.timeout ?? 30000,
-      retry: 0, // We handle retries manually for more control
-      hooks: {
-        beforeRequest: [
-          async (request) => {
-            // Add authentication header
-            const token = await this.auth.getToken();
-            if (token) {
-              request.headers.set('Authorization', `Bearer ${token}`);
-            }
-
-            // Apply custom request interceptors
-            let modifiedRequest = request;
-            if (config.interceptors?.request) {
-              for (const interceptor of config.interceptors.request) {
-                modifiedRequest = await interceptor(modifiedRequest);
-              }
-            }
-            return modifiedRequest;
-          },
-        ],
-        beforeError: [
-          async (error) => {
-            const { response } = error;
-
-            if (!response) {
-              throw new NetworkError('Network error: no response received', error);
-            }
-
-            // Try to parse error response
-            let errorData: unknown;
-            try {
-              errorData = await response.json();
-            } catch {
-              errorData = await response.text();
-            }
-
-            // Create appropriate error type based on status code
-            const status = response.status;
-
-            if (status === 401 || status === 403) {
-              throw new AuthenticationError(
-                `Authentication failed: ${response.statusText}`,
-                status,
-                errorData,
-                error.request,
-              );
-            }
-
-            if (status === 404) {
-              throw new NotFoundError(
-                `Resource not found: ${response.statusText}`,
-                errorData,
-                error.request,
-              );
-            }
-
-            if (status === 429) {
-              const retryAfter = response.headers.get('Retry-After');
-              throw new RateLimitError(
-                'Rate limit exceeded',
-                retryAfter ? Number.parseInt(retryAfter, 10) : undefined,
-                errorData,
-                error.request,
-              );
-            }
-
-            if (status >= 400 && status < 500) {
-              throw new ValidationError(
-                `Validation error: ${response.statusText}`,
-                status,
-                errorData,
-                error.request,
-              );
-            }
-
-            if (status >= 500) {
-              throw new ServerError(
-                `Server error: ${response.statusText}`,
-                status,
-                errorData,
-                error.request,
-              );
-            }
-
-            throw new OneVizionError(error.message, status, errorData, error.request);
-          },
-        ],
-        afterResponse: [
-          async (_request, _options, response) => {
-            // Apply custom response interceptors
-            let modifiedResponse = response;
-            if (config.interceptors?.response) {
-              for (const interceptor of config.interceptors.response) {
-                modifiedResponse = await interceptor(modifiedResponse);
-              }
-            }
-            return modifiedResponse;
-          },
-        ],
-      },
-    };
-
-    this.ky = ky.create(kyOptions);
-  }
-
-  async get<T>(url: string, options?: KyOptions): Promise<T> {
-    return withRetry(async () => this.ky.get(url, options).json<T>(), this.retryConfig);
-  }
-
-  async post<T>(url: string, data?: unknown, options?: KyOptions): Promise<T> {
-    return withRetry(
-      async () => this.ky.post(url, { ...options, json: data }).json<T>(),
-      this.retryConfig,
-    );
-  }
-
-  async put<T>(url: string, data?: unknown, options?: KyOptions): Promise<T> {
-    return withRetry(
-      async () => this.ky.put(url, { ...options, json: data }).json<T>(),
-      this.retryConfig,
-    );
-  }
-
-  async patch<T>(url: string, data?: unknown, options?: KyOptions): Promise<T> {
-    return withRetry(
-      async () => this.ky.patch(url, { ...options, json: data }).json<T>(),
-      this.retryConfig,
-    );
-  }
-
-  async delete<T>(url: string, options?: KyOptions): Promise<T> {
-    return withRetry(async () => this.ky.delete(url, options).json<T>(), this.retryConfig);
+    this.requestInterceptors = config.interceptors?.request ?? [];
+    this.responseInterceptors = config.interceptors?.response ?? [];
   }
 
   /**
-   * Get the underlying ky instance for advanced usage
+   * Build full URL from relative path
    */
-  getKyInstance(): KyInstance {
-    return this.ky;
+  private buildUrl(path: string): string {
+    return `${this.baseUrl}/${path}`;
+  }
+
+  /**
+   * Apply request interceptors
+   */
+  private async applyRequestInterceptors(request: Request): Promise<Request> {
+    let modifiedRequest = request;
+    for (const interceptor of this.requestInterceptors) {
+      modifiedRequest = await interceptor(modifiedRequest);
+    }
+    return modifiedRequest;
+  }
+
+  /**
+   * Apply response interceptors
+   */
+  private async applyResponseInterceptors(response: Response): Promise<Response> {
+    let modifiedResponse = response;
+    for (const interceptor of this.responseInterceptors) {
+      modifiedResponse = await interceptor(modifiedResponse);
+    }
+    return modifiedResponse;
+  }
+
+  /**
+   * Convert HTTP errors to typed OneVizionError
+   */
+  private async handleErrorResponse(response: Response): Promise<never> {
+    // Parse error response
+    let errorData: unknown;
+    const text = await response.text();
+
+    if (text) {
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = text;
+      }
+    }
+
+    const message =
+      typeof errorData === 'string'
+        ? errorData
+        : ((errorData as { message?: string })?.message ?? response.statusText);
+
+    // Map status codes to error types
+    switch (response.status) {
+      case 401:
+      case 403:
+        throw new AuthenticationError(message, response.status, errorData);
+
+      case 404:
+        throw new NotFoundError(message, response.status, errorData);
+
+      case 400:
+      case 422:
+        throw new ValidationError(message, response.status, errorData);
+
+      case 429: {
+        const retryAfter = response.headers.get('Retry-After');
+        throw new RateLimitError(
+          message,
+          retryAfter ? Number.parseInt(retryAfter, 10) : undefined,
+          errorData,
+        );
+      }
+
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        throw new ServerError(message, response.status, errorData);
+
+      default:
+        throw new OneVizionError(message, response.status, errorData);
+    }
+  }
+
+  /**
+   * Core request method with auth, timeout, and interceptors
+   */
+  private async request<T>(
+    method: string,
+    path: string,
+    options?: {
+      body?: unknown;
+      headers?: Record<string, string>;
+      signal?: AbortSignal;
+    },
+  ): Promise<T> {
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    // Combine signals if user provided one
+    const signal = options?.signal
+      ? this.combineSignals(controller.signal, options.signal)
+      : controller.signal;
+
+    try {
+      // Get auth token
+      const token = await this.auth.getToken();
+
+      // Build headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      };
+
+      if (token) {
+        // @ts-expect-error - TypeScript exactOptionalPropertyTypes requires bracket notation
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      // Create request
+      let request = new Request(this.buildUrl(path), {
+        method,
+        headers,
+        body: options?.body ? JSON.stringify(options.body) : null,
+        signal,
+      });
+
+      // Apply request interceptors
+      request = await this.applyRequestInterceptors(request);
+
+      // Make request
+      let response = await fetch(request);
+
+      clearTimeout(timeoutId);
+
+      // Apply response interceptors
+      response = await this.applyResponseInterceptors(response);
+
+      // Handle errors
+      if (!response.ok) {
+        await this.handleErrorResponse(response);
+      }
+
+      // Parse JSON response
+      if (response.status === 204 || method === 'DELETE') {
+        return undefined as T;
+      }
+
+      return await response.json();
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      // Re-throw OneVizionError as-is
+      if (error instanceof OneVizionError) {
+        throw error;
+      }
+
+      // Handle abort/timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new NetworkError('Request timeout');
+      }
+
+      // Network errors
+      throw new NetworkError(
+        error instanceof Error ? error.message : 'Network request failed',
+        error instanceof Error ? error : undefined,
+      );
+    }
+  }
+
+  /**
+   * Combine multiple AbortSignals (helper for user-provided signals)
+   */
+  private combineSignals(signal1: AbortSignal, signal2: AbortSignal): AbortSignal {
+    const controller = new AbortController();
+
+    const abort = () => controller.abort();
+    signal1.addEventListener('abort', abort);
+    signal2.addEventListener('abort', abort);
+
+    return controller.signal;
+  }
+
+  /**
+   * GET request with retry
+   */
+  async get<T>(path: string, options?: { signal?: AbortSignal }): Promise<T> {
+    return withRetry(() => this.request<T>('GET', path, options), this.retryConfig);
+  }
+
+  /**
+   * POST request with retry
+   */
+  async post<T>(path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
+    return withRetry(() => this.request<T>('POST', path, { ...options, body }), this.retryConfig);
+  }
+
+  /**
+   * PUT request with retry
+   */
+  async put<T>(path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
+    return withRetry(() => this.request<T>('PUT', path, { ...options, body }), this.retryConfig);
+  }
+
+  /**
+   * PATCH request with retry
+   */
+  async patch<T>(path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
+    return withRetry(() => this.request<T>('PATCH', path, { ...options, body }), this.retryConfig);
+  }
+
+  /**
+   * DELETE request with retry
+   */
+  async delete<T>(path: string, options?: { signal?: AbortSignal }): Promise<T> {
+    return withRetry(() => this.request<T>('DELETE', path, options), this.retryConfig);
   }
 }

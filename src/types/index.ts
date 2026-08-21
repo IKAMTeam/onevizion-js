@@ -1,13 +1,23 @@
-export type * from './openapi.js';
+// Re-export field types
+export type { TrackorFieldValue } from './fields.js';
 
 /**
  * Common types used throughout the SDK
  */
 
+export interface AuthProvider {
+  /** Get the current authentication token */
+  getToken(): Promise<string | null>;
+  /** Refresh the authentication token if expired */
+  refreshToken?(): Promise<string>;
+  /** Check if authentication is valid */
+  isAuthenticated(): Promise<boolean>;
+}
+
 export interface OneVizionConfig {
   /** Base URL for the OneVizion API (e.g., 'https://app.onevizion.com') */
   baseUrl: string;
-  /** Authentication provider */
+  /** Authentication provider (use tokenAuth, credentialsAuth, or widgetAuth) */
   auth: AuthProvider;
   /** Optional request timeout in milliseconds (default: 30000) */
   timeout?: number;
@@ -31,15 +41,6 @@ export interface RetryConfig {
   backoffFactor?: number;
   /** HTTP status codes that should trigger a retry (default: [408, 429, 500, 502, 503, 504]) */
   retryableStatusCodes?: number[];
-}
-
-export interface AuthProvider {
-  /** Get the current authentication token */
-  getToken(): Promise<string | null>;
-  /** Refresh the authentication token if expired */
-  refreshToken?(): Promise<string>;
-  /** Check if authentication is valid */
-  isAuthenticated(): Promise<boolean>;
 }
 
 export type RequestInterceptor = (request: Request) => Promise<Request> | Request;

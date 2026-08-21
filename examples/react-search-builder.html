@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneVizion Search Builder</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@tanstack/react-query@5/build/umd/index.production.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: #f5f5f5;
+    }
+    #root {
+      min-height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    // Import from the built SDK (adjust path as needed)
+    // In production, this would be: import { ... } from '@onevizion/sdk/react'
+
+    // For demo purposes, inline the search builder
+    class SearchQuery {
+      constructor() {
+        this.parts = [];
+      }
+
+      equal(field, value) {
+        this.parts.push(`equal(${field}, ${this.formatValue(value)})`);
+        return this;
+      }
+
+      notEqual(field, value) {
+        this.parts.push(`not_equal(${field}, ${this.formatValue(value)})`);
+        return this;
+      }
+
+      greater(field, value) {
+        this.parts.push(`greater(${field}, ${this.formatValue(value)})`);
+        return this;
+      }
+
+      less(field, value) {
+        this.parts.push(`less(${field}, ${this.formatValue(value)})`);
+        return this;
+      }
+
+      isNull(field) {
+        this.parts.push(`is_null(${field})`);
+        return this;
+      }
+
+      isNotNull(field) {
+        this.parts.push(`is_not_null(${field})`);
+        return this;
+      }
+
+      greaterThanToday(field, offset = 0) {
+        const offsetStr = offset >= 0 ? `+${offset}` : `${offset}`;
+        this.parts.push(`gt_today(${field}, ${offsetStr})`);
+        return this;
+      }
+
+      thisWeek(field) {
+        this.parts.push(`this_week(${field}, +0)`);
+        return this;
+      }
+
+      thisMonth(field) {
+        this.parts.push(`this_month(${field}, +0)`);
+        return this;
+      }
+
+      and() {
+        if (this.parts.length > 0) {
+          this.parts.push('and');
+        }
+        return this;
+      }
+
+      formatValue(value) {
+        if (value === null) return 'null';
+        if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+        const escaped = String(value).replace(/"/g, '\\"');
+        return `"${escaped}"`;
+      }
+
+      toString() {
+        return this.parts.join(' ');
+      }
+    }
+
+    function search() {
+      return new SearchQuery();
+    }
+
+    // Rest of the React app from react-search-builder.tsx goes here
+    // (copied inline for standalone demo)
+
+    const { useState } = React;
+    const { QueryClient, QueryClientProvider } = window.ReactQuery;
+
+    // Mock client for demo
+    const mockClient = {
+      trackors: {
+        search: async (type, query, options) => {
+          console.log('Search:', type, query.toString(), options);
+          // Return mock data
+          return [
+            { id: 1, trackorType: type, fields: { STATUS: 'Active', NAME: 'Example 1' } },
+            { id: 2, trackorType: type, fields: { STATUS: 'Pending', NAME: 'Example 2' } },
+          ];
+        }
+      }
+    };
+
+    const queryClient = new QueryClient();
+
+    function SearchBuilder() {
+      const [trackorType, setTrackorType] = useState('ASSET');
+      const [field, setField] = useState('STATUS');
+      const [operator, setOperator] = useState('equal');
+      const [value, setValue] = useState('');
+      const [conditions, setConditions] = useState([]);
+      const [results, setResults] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [queryString, setQueryString] = useState('');
+
+      const addCondition = () => {
+        if (!field || (!value && !['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator))) return;
+        setConditions([...conditions, { field, operator, value }]);
+        setValue('');
+      };
+
+      const removeCondition = (index) => {
+        setConditions(conditions.filter((_, i) => i !== index));
+      };
+
+      const executeSearch = async () => {
+        if (conditions.length === 0) {
+          setError('Add at least one search condition');
+          return;
+        }
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+          let query = search();
+
+          conditions.forEach((condition, index) => {
+            if (index > 0) query = query.and();
+
+            switch (condition.operator) {
+              case 'equal': query = query.equal(condition.field, condition.value); break;
+              case 'notEqual': query = query.notEqual(condition.field, condition.value); break;
+              case 'greater': query = query.greater(condition.field, parseFloat(condition.value) || condition.value); break;
+              case 'less': query = query.less(condition.field, parseFloat(condition.value) || condition.value); break;
+              case 'isNull': query = query.isNull(condition.field); break;
+              case 'isNotNull': query = query.isNotNull(condition.field); break;
+              case 'greaterThanToday': query = query.greaterThanToday(condition.field, parseInt(condition.value) || 0); break;
+              case 'thisWeek': query = query.thisWeek(condition.field); break;
+              case 'thisMonth': query = query.thisMonth(condition.field); break;
+            }
+          });
+
+          const queryStr = query.toString();
+          setQueryString(queryStr);
+
+          const data = await mockClient.trackors.search(trackorType, query, { perPage: 10 });
+          setResults(data);
+        } catch (err) {
+          setError(err.message || 'Search failed');
+          setResults([]);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const reset = () => {
+        setConditions([]);
+        setResults([]);
+        setQueryString('');
+        setError(null);
+      };
+
+      return (
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+          <h1>OneVizion Search Builder</h1>
+          <p style={{ color: '#666' }}>Build dynamic trackor searches with a visual query builder</p>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+              Trackor Type:
+            </label>
+            <input
+              type="text"
+              value={trackorType}
+              onChange={(e) => setTrackorType(e.target.value.toUpperCase())}
+              placeholder="e.g., ASSET, BILL_OF_MATERIALS"
+              style={{ padding: '8px', width: '300px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+
+          <div style={{ padding: '15px', background: 'white', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ marginTop: 0 }}>Add Search Condition</h3>
+
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                value={field}
+                onChange={(e) => setField(e.target.value.toUpperCase())}
+                placeholder="Field (e.g., STATUS)"
+                style={{ padding: '8px', flex: '1', minWidth: '150px', borderRadius: '4px', border: '1px solid #ddd' }}
+              />
+
+              <select
+                value={operator}
+                onChange={(e) => setOperator(e.target.value)}
+                style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+              >
+                <option value="equal">Equal</option>
+                <option value="notEqual">Not Equal</option>
+                <option value="greater">Greater</option>
+                <option value="less">Less</option>
+                <option value="isNull">Is Null</option>
+                <option value="isNotNull">Is Not Null</option>
+                <option value="greaterThanToday">After Today</option>
+                <option value="thisWeek">This Week</option>
+                <option value="thisMonth">This Month</option>
+              </select>
+
+              {!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) && (
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="Value"
+                  style={{ padding: '8px', flex: '1', minWidth: '150px', borderRadius: '4px', border: '1px solid #ddd' }}
+                />
+              )}
+
+              <button onClick={addCondition} style={{ padding: '8px 16px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                Add
+              </button>
+            </div>
+
+            {conditions.length > 0 && (
+              <div style={{ marginTop: '15px' }}>
+                <strong>Conditions:</strong>
+                {conditions.map((condition, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: '#f8f9fa', borderRadius: '4px', marginTop: '5px' }}>
+                    <span style={{ flex: 1 }}>
+                      {index > 0 && <span style={{ color: '#666', marginRight: '5px', fontWeight: 'bold' }}>AND</span>}
+                      <code>{condition.field} {condition.operator} {condition.value || ''}</code>
+                    </span>
+                    <button onClick={() => removeCondition(index)} style={{ padding: '4px 8px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
+              <button onClick={executeSearch} disabled={conditions.length === 0 || isLoading} style={{ padding: '10px 20px', background: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: conditions.length === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                {isLoading ? 'Searching...' : 'Search'}
+              </button>
+              <button onClick={reset} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                Reset
+              </button>
+            </div>
+          </div>
+
+          {queryString && (
+            <div style={{ marginBottom: '20px', padding: '15px', background: 'white', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <strong>Generated Query:</strong>
+              <pre style={{ padding: '10px', background: '#f8f9fa', borderRadius: '4px', overflowX: 'auto', fontSize: '12px', marginTop: '10px' }}>
+                {queryString}
+              </pre>
+            </div>
+          )}
+
+          {error && (
+            <div style={{ padding: '10px', background: '#f8d7da', color: '#721c24', borderRadius: '4px', marginBottom: '20px' }}>
+              <strong>Error:</strong> {error}
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <div style={{ background: 'white', borderRadius: '8px', padding: '15px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+              <h3>Results ({results.length})</h3>
+              {results.map((trackor) => (
+                <div key={trackor.id} style={{ padding: '10px', borderBottom: '1px solid #eee' }}>
+                  <strong>#{trackor.id}</strong> - {trackor.trackorType}
+                  <pre style={{ margin: '5px 0 0 0', fontSize: '11px', color: '#666' }}>
+                    {JSON.stringify(trackor.fields, null, 2)}
+                  </pre>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <SearchBuilder />
+        </QueryClientProvider>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

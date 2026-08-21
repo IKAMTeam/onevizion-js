@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneVizion Search Builder</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    input, select {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-secondary { background: #6c757d; color: white; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .condition {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      margin-top: 5px;
+    }
+    .error { padding: 15px; background: #f8d7da; color: #721c24; border-radius: 4px; }
+    .success { padding: 15px; background: #d4edda; color: #155724; border-radius: 4px; }
+    pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #dee2e6; }
+    th { background: #f8f9fa; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="root">Loading...</div>
+
+  <script type="module">
+    // Import from the built SDK
+    import { OneVizionClient, widgetAuth, search } from './react.js';
+
+    const app = document.getElementById('root');
+
+    // Create client with widget auth
+    const client = new OneVizionClient({
+      baseUrl: window.location.origin,
+      auth: widgetAuth({ baseUrl: window.location.origin })
+    });
+
+    // State
+    let state = {
+      trackorType: 'ASSET',
+      field: 'STATUS',
+      operator: 'equal',
+      value: '',
+      conditions: [],
+      results: [],
+      queryString: '',
+      error: null,
+      loading: false
+    };
+
+    function render() {
+      app.innerHTML = `
+        <div class="container">
+          <h1>OneVizion Search Builder</h1>
+          <p style="color: #666;">Build and execute trackor searches with visual query builder</p>
+
+          <div class="card">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Trackor Type:</label>
+            <input
+              id="trackorType"
+              type="text"
+              value="${state.trackorType}"
+              placeholder="e.g., ASSET, BILL_OF_MATERIALS"
+              style="width: 300px;"
+            />
+          </div>
+
+          <div class="card">
+            <h3 style="margin-top: 0;">Add Search Condition</h3>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+              <input id="field" type="text" value="${state.field}" placeholder="Field (e.g., STATUS)" style="flex: 1; min-width: 150px;" />
+
+              <select id="operator" style="min-width: 150px;">
+                <option value="equal" ${state.operator === 'equal' ? 'selected' : ''}>Equal</option>
+                <option value="notEqual" ${state.operator === 'notEqual' ? 'selected' : ''}>Not Equal</option>
+                <option value="greater" ${state.operator === 'greater' ? 'selected' : ''}>Greater</option>
+                <option value="less" ${state.operator === 'less' ? 'selected' : ''}>Less</option>
+                <option value="isNull" ${state.operator === 'isNull' ? 'selected' : ''}>Is Null</option>
+                <option value="isNotNull" ${state.operator === 'isNotNull' ? 'selected' : ''}>Is Not Null</option>
+                <option value="thisWeek" ${state.operator === 'thisWeek' ? 'selected' : ''}>This Week</option>
+                <option value="thisMonth" ${state.operator === 'thisMonth' ? 'selected' : ''}>This Month</option>
+              </select>
+
+              ${!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(state.operator) ?
+                `<input id="value" type="text" value="${state.value}" placeholder="Value" style="flex: 1; min-width: 150px;" />` : ''}
+
+              <button class="btn-primary" onclick="window.addCondition()">Add</button>
+            </div>
+
+            ${state.conditions.length > 0 ? `
+              <div>
+                <strong>Conditions:</strong>
+                ${state.conditions.map((c, i) => `
+                  <div class="condition">
+                    <span style="flex: 1;">
+                      ${i > 0 ? '<strong style="color: #666; margin-right: 5px;">AND</strong>' : ''}
+                      <code>${c.field} ${c.operator} ${c.value || ''}</code>
+                    </span>
+                    <button class="btn-danger" onclick="window.removeCondition(${i})" style="padding: 4px 8px; font-size: 12px;">×</button>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+              <button class="btn-success" onclick="window.executeSearch()" ${state.conditions.length === 0 || state.loading ? 'disabled' : ''}>
+                ${state.loading ? 'Searching...' : 'Search'}
+              </button>
+              <button class="btn-secondary" onclick="window.reset()">Reset</button>
+            </div>
+          </div>
+
+          ${state.queryString ? `
+            <div class="card">
+              <strong>Generated Query:</strong>
+              <pre>${state.queryString}</pre>
+            </div>
+          ` : ''}
+
+          ${state.error ? `
+            <div class="error">${state.error}</div>
+          ` : ''}
+
+          ${state.results.length > 0 ? `
+            <div class="card">
+              <h3>Results (${state.results.length})</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Fields</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${state.results.map(t => `
+                    <tr>
+                      <td>${t.id}</td>
+                      <td>${t.trackorType}</td>
+                      <td><pre style="margin: 0; font-size: 11px;">${JSON.stringify(t.fields, null, 2)}</pre></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : state.queryString && !state.loading && !state.error ? `
+            <div class="card" style="text-align: center; color: #666;">No results found</div>
+          ` : ''}
+        </div>
+      `;
+
+      // Attach event listeners
+      document.getElementById('trackorType')?.addEventListener('input', e => {
+        state.trackorType = e.target.value.toUpperCase();
+      });
+      document.getElementById('field')?.addEventListener('input', e => {
+        state.field = e.target.value.toUpperCase();
+      });
+      document.getElementById('operator')?.addEventListener('change', e => {
+        state.operator = e.target.value;
+        render();
+      });
+      document.getElementById('value')?.addEventListener('input', e => {
+        state.value = e.target.value;
+      });
+    }
+
+    window.addCondition = () => {
+      const needsValue = !['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(state.operator);
+      if (!state.field || (needsValue && !state.value)) return;
+
+      state.conditions.push({
+        field: state.field,
+        operator: state.operator,
+        value: state.value
+      });
+      state.value = '';
+      render();
+    };
+
+    window.removeCondition = (index) => {
+      state.conditions.splice(index, 1);
+      render();
+    };
+
+    window.executeSearch = async () => {
+      if (state.conditions.length === 0) {
+        state.error = 'Add at least one condition';
+        render();
+        return;
+      }
+
+      state.loading = true;
+      state.error = null;
+      render();
+
+      try {
+        let query = search();
+
+        state.conditions.forEach((c, i) => {
+          if (i > 0) query = query.and();
+
+          switch (c.operator) {
+            case 'equal': query = query.equal(c.field, c.value); break;
+            case 'notEqual': query = query.notEqual(c.field, c.value); break;
+            case 'greater': query = query.greater(c.field, parseFloat(c.value) || c.value); break;
+            case 'less': query = query.less(c.field, parseFloat(c.value) || c.value); break;
+            case 'isNull': query = query.isNull(c.field); break;
+            case 'isNotNull': query = query.isNotNull(c.field); break;
+            case 'thisWeek': query = query.thisWeek(c.field); break;
+            case 'thisMonth': query = query.thisMonth(c.field); break;
+          }
+        });
+
+        state.queryString = query.toString();
+        state.results = await client.trackors.search(state.trackorType, query, { perPage: 10 });
+      } catch (err) {
+        state.error = err.message || 'Search failed';
+        state.results = [];
+      } finally {
+        state.loading = false;
+        render();
+      }
+    };
+
+    window.reset = () => {
+      state.conditions = [];
+      state.results = [];
+      state.queryString = '';
+      state.error = null;
+      render();
+    };
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>

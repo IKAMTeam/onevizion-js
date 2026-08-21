@@ -27,10 +27,10 @@ export function useCreateTrackor(
 
   return useMutation({
     mutationFn: (data) => client.trackors.create(data),
-    onSuccess: (...args) => {
-      // Invalidate trackors list to refetch
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() });
-      options?.onSuccess?.(...args);
+    onSuccess: async (...args) => {
+      // Wait for invalidation before calling user callback (prevents race condition)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() });
+      await options?.onSuccess?.(...args);
     },
     ...options,
   });
@@ -57,11 +57,13 @@ export function useUpdateTrackor(
 
   return useMutation({
     mutationFn: ({ id, data }) => client.trackors.update(id, data),
-    onSuccess: (...args) => {
-      // Invalidate specific trackor and lists
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(args[1].id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() });
-      options?.onSuccess?.(...args);
+    onSuccess: async (...args) => {
+      // Wait for all invalidations before calling user callback
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(args[1].id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() }),
+      ]);
+      await options?.onSuccess?.(...args);
     },
     ...options,
   });
@@ -80,11 +82,13 @@ export function useDeleteTrackor(
 
   return useMutation({
     mutationFn: (id) => client.trackors.delete(id),
-    onSuccess: (...args) => {
-      // Invalidate specific trackor and lists
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(args[1]) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() });
-      options?.onSuccess?.(...args);
+    onSuccess: async (...args) => {
+      // Wait for all invalidations
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(args[1]) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() }),
+      ]);
+      await options?.onSuccess?.(...args);
     },
     ...options,
   });
@@ -110,13 +114,15 @@ export function useBatchUpdateTrackors(
 
   return useMutation({
     mutationFn: ({ updates }) => client.trackors.batchUpdate(updates),
-    onSuccess: (...args) => {
+    onSuccess: async (...args) => {
       // Invalidate all affected trackors and lists
-      for (const update of args[1].updates) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(update.id) });
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() });
-      options?.onSuccess?.(...args);
+      const invalidations = args[1].updates.map((update) =>
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackors.detail(update.id) }),
+      );
+      invalidations.push(queryClient.invalidateQueries({ queryKey: queryKeys.trackors.lists() }));
+
+      await Promise.all(invalidations);
+      await options?.onSuccess?.(...args);
     },
     ...options,
   });
@@ -145,12 +151,12 @@ export function useExecuteWorkflow(
 
   return useMutation({
     mutationFn: ({ workflowId, data }) => client.workflows.execute(workflowId, data),
-    onSuccess: (...args) => {
-      // Invalidate workflow executions list
-      queryClient.invalidateQueries({
+    onSuccess: async (...args) => {
+      // Wait for invalidation
+      await queryClient.invalidateQueries({
         queryKey: queryKeys.workflows.executions(args[1].workflowId),
       });
-      options?.onSuccess?.(...args);
+      await options?.onSuccess?.(...args);
     },
     ...options,
   });

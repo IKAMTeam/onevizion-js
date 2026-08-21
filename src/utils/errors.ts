@@ -15,7 +15,7 @@ export class OneVizionError extends Error {
 }
 
 /**
- * Authentication-related errors
+ * Authentication error (401, 403)
  */
 export class AuthenticationError extends OneVizionError {
   constructor(message: string, statusCode?: number, response?: unknown, request?: unknown) {
@@ -26,7 +26,7 @@ export class AuthenticationError extends OneVizionError {
 }
 
 /**
- * Validation errors (400-level errors)
+ * Validation error (400, 422)
  */
 export class ValidationError extends OneVizionError {
   constructor(message: string, statusCode?: number, response?: unknown, request?: unknown) {
@@ -37,37 +37,39 @@ export class ValidationError extends OneVizionError {
 }
 
 /**
- * Network-related errors (connectivity issues, timeouts)
+ * Network error (connection, timeout)
  */
 export class NetworkError extends OneVizionError {
-  constructor(
-    message: string,
-    public readonly originalError?: Error,
-  ) {
+  public readonly originalError?: Error;
+
+  constructor(message: string, originalError?: Error) {
     super(message);
     this.name = 'NetworkError';
+    if (originalError !== undefined) {
+      this.originalError = originalError;
+    }
     Object.setPrototypeOf(this, NetworkError.prototype);
   }
 }
 
 /**
- * Rate limiting errors (429)
+ * Rate limit error (429)
  */
 export class RateLimitError extends OneVizionError {
-  constructor(
-    message: string,
-    public readonly retryAfter?: number,
-    response?: unknown,
-    request?: unknown,
-  ) {
+  public readonly retryAfter?: number;
+
+  constructor(message: string, retryAfter?: number, response?: unknown, request?: unknown) {
     super(message, 429, response, request);
     this.name = 'RateLimitError';
+    if (retryAfter !== undefined) {
+      this.retryAfter = retryAfter;
+    }
     Object.setPrototypeOf(this, RateLimitError.prototype);
   }
 }
 
 /**
- * Resource not found errors (404)
+ * Not found error (404)
  */
 export class NotFoundError extends OneVizionError {
   constructor(message: string, response?: unknown, request?: unknown) {
@@ -78,7 +80,7 @@ export class NotFoundError extends OneVizionError {
 }
 
 /**
- * Server errors (500-level errors)
+ * Server error (500-level)
  */
 export class ServerError extends OneVizionError {
   constructor(message: string, statusCode?: number, response?: unknown, request?: unknown) {
@@ -86,4 +88,22 @@ export class ServerError extends OneVizionError {
     this.name = 'ServerError';
     Object.setPrototypeOf(this, ServerError.prototype);
   }
+}
+
+/**
+ * Check if error is retryable based on status code or error type
+ */
+export function isRetryable(error: unknown): boolean {
+  if (!(error instanceof OneVizionError)) {
+    return false;
+  }
+
+  // Network errors are retryable
+  if (error instanceof NetworkError) {
+    return true;
+  }
+
+  // Retry on these status codes
+  const retryableStatusCodes = [408, 429, 500, 502, 503, 504];
+  return error.statusCode !== undefined && retryableStatusCodes.includes(error.statusCode);
 }

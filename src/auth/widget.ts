@@ -1,6 +1,23 @@
 import type { AuthProvider } from '../types/index.js';
 import { AuthenticationError } from '../utils/errors.js';
 
+/**
+ * Type guard for token response validation
+ */
+interface TokenResponse {
+  token: string;
+}
+
+function isTokenResponse(data: unknown): data is TokenResponse {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'token' in data &&
+    typeof (data as { token: unknown }).token === 'string' &&
+    (data as { token: string }).token.length > 0
+  );
+}
+
 export interface WidgetAuthConfig {
   /** Base URL for the OneVizion API */
   baseUrl: string;
@@ -23,6 +40,7 @@ export class WidgetAuth implements AuthProvider {
   private token: string | null = null;
   private tokenExpiry: number | null = null;
   private readonly tokenCacheDuration: number;
+  private refreshPromise: Promise<string> | null = null; // Race condition protection
 
   constructor(config: WidgetAuthConfig) {
     // baseUrl is stored in config for future use with absolute URLs if needed
@@ -46,7 +64,7 @@ export class WidgetAuth implements AuthProvider {
    */
   private getCsrfToken(): string | null {
     if (!this.isInIframe()) {
-      return null;
+      throw new AuthenticationError('WidgetAuth must be used within an iframe context');
     }
 
     try {
@@ -54,6 +72,15 @@ export class WidgetAuth implements AuthProvider {
       const csrfMeta = window.top?.document.querySelector('meta[name="_csrf"]');
       return csrfMeta?.getAttribute('content') ?? null;
     } catch (error) {
+      // Check if it's a SecurityError (cross-origin access)
+      if (error instanceof DOMException && error.name === 'SecurityError') {
+        throw new AuthenticationError(
+          'Cross-origin access denied. WidgetAuth requires same-origin iframe or allow-same-origin sandbox attribute.',
+          undefined,
+          undefined,
+          error,
+        );
+      }
       throw new AuthenticationError(
         'Failed to access parent document. Ensure iframe has allow-same-origin sandbox attribute.',
         undefined,
@@ -67,6 +94,9 @@ export class WidgetAuth implements AuthProvider {
    * Exchange CSRF token for bearer token
    */
   private async fetchBearerToken(csrfToken: string): Promise<string> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     try {
       // IMPORTANT: Use relative URL for iframe compatibility
       const response = await fetch('/widget/GenerateApiTokenForWebSession', {
@@ -76,7 +106,10 @@ export class WidgetAuth implements AuthProvider {
           'X-CSRF-TOKEN': csrfToken,
         },
         credentials: 'include',
+        signal: controller.signal,
       });
+
+      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new AuthenticationError(
@@ -86,17 +119,30 @@ export class WidgetAuth implements AuthProvider {
         );
       }
 
-      const data = (await response.json()) as { token?: string };
+      const data: unknown = await response.json();
 
-      if (!data.token) {
-        throw new AuthenticationError('API token not found in response', response.status, data);
+      // Runtime validation with type guard
+      if (!isTokenResponse(data)) {
+        throw new AuthenticationError(
+          'Invalid response format: missing or invalid token',
+          response.status,
+          data,
+        );
       }
 
       return data.token;
     } catch (error) {
+      clearTimeout(timeout);
+
       if (error instanceof AuthenticationError) {
         throw error;
       }
+
+      // Handle abort/timeout
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new AuthenticationError('Token fetch timeout after 10 seconds');
+      }
+
       throw new AuthenticationError(
         'Network error while fetching API token',
         undefined,
@@ -112,23 +158,40 @@ export class WidgetAuth implements AuthProvider {
       return this.token;
     }
 
+    // If refresh is already in progress, wait for it (prevent race condition)
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
     // Token expired or missing - refresh it
     return this.refreshToken();
   }
 
   async refreshToken(): Promise<string> {
-    const csrfToken = this.getCsrfToken();
-
-    if (!csrfToken) {
-      throw new AuthenticationError(
-        'CSRF token not found. Ensure this is running in a OneVizion widget iframe.',
-      );
+    // Reuse in-flight refresh request
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
 
-    this.token = await this.fetchBearerToken(csrfToken);
-    this.tokenExpiry = Date.now() + this.tokenCacheDuration;
+    this.refreshPromise = (async () => {
+      const csrfToken = this.getCsrfToken();
 
-    return this.token;
+      if (!csrfToken) {
+        throw new AuthenticationError(
+          'CSRF token not found. Ensure this is running in a OneVizion widget iframe.',
+        );
+      }
+
+      const token = await this.fetchBearerToken(csrfToken);
+      this.token = token;
+      this.tokenExpiry = Date.now() + this.tokenCacheDuration;
+
+      return token;
+    })().finally(() => {
+      this.refreshPromise = null;
+    });
+
+    return this.refreshPromise;
   }
 
   async isAuthenticated(): Promise<boolean> {

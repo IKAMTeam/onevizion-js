@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import type { OneVizionClient } from '../client.js';
 
@@ -30,8 +30,11 @@ export interface OneVizionProviderProps {
  * }
  * ```
  */
-export function OneVizionProvider({ client, children }: OneVizionProviderProps) {
-  return <OneVizionContext.Provider value={client}>{children}</OneVizionContext.Provider>;
+export function OneVizionProvider({ client, children }: OneVizionProviderProps): JSX.Element {
+  // Memoize to prevent unnecessary re-renders when parent re-renders
+  const value = useMemo(() => client, [client]);
+
+  return <OneVizionContext.Provider value={value}>{children}</OneVizionContext.Provider>;
 }
 
 /**

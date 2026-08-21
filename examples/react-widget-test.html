@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneVizion React Widget Test</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    #root {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error { background: #f8d7da; color: #721c24; }
+    .status.loading { background: #d1ecf1; color: #0c5460; }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { background: #0056b3; }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+
+    .trackor-list {
+      margin-top: 20px;
+    }
+    .trackor-item {
+      padding: 10px;
+      margin: 5px 0;
+      background: #f8f9fa;
+      border-radius: 4px;
+    }
+
+    pre {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Simple widget auth implementation
+    class WidgetAuth {
+      constructor(config) {
+        this.baseUrl = config.baseUrl;
+        this.token = null;
+        this.tokenExpiry = null;
+        this.tokenCacheDuration = config.tokenCacheDuration || 3600000;
+      }
+
+      isInIframe() {
+        try {
+          return window.self !== window.top;
+        } catch {
+          return true;
+        }
+      }
+
+      getCsrfToken() {
+        if (!this.isInIframe()) {
+          throw new Error('Not in iframe');
+        }
+
+        try {
+          const csrfMeta = window.top?.document.querySelector('meta[name="_csrf"]');
+          return csrfMeta?.getAttribute('content') || null;
+        } catch (error) {
+          throw new Error('Cannot access parent document. Check sandbox attributes.');
+        }
+      }
+
+      async fetchBearerToken(csrfToken) {
+        const response = await fetch('/widget/GenerateApiTokenForWebSession', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRF-TOKEN': csrfToken,
+          },
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error(`Token exchange failed: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        if (!data.token) {
+          throw new Error('No token in response');
+        }
+
+        return data.token;
+      }
+
+      async getToken() {
+        if (this.token && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+          return this.token;
+        }
+
+        const csrfToken = this.getCsrfToken();
+        if (!csrfToken) {
+          throw new Error('CSRF token not found');
+        }
+
+        this.token = await this.fetchBearerToken(csrfToken);
+        this.tokenExpiry = Date.now() + this.tokenCacheDuration;
+
+        return this.token;
+      }
+
+      async isAuthenticated() {
+        try {
+          const token = await this.getToken();
+          return !!token;
+        } catch {
+          return false;
+        }
+      }
+    }
+
+    // Simple HTTP client
+    class OneVizionClient {
+      constructor(config) {
+        this.baseUrl = config.baseUrl;
+        this.auth = config.auth;
+      }
+
+      async request(endpoint, options = {}) {
+        const token = await this.auth.getToken();
+
+        const response = await fetch(`${this.baseUrl}/api/${endpoint}`, {
+          ...options,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        return response.json();
+      }
+
+      async getTrackors(filters = {}) {
+        const params = new URLSearchParams();
+        if (filters.perPage) params.set('perPage', filters.perPage);
+        if (filters.trackorType) params.set('trackorType', filters.trackorType);
+
+        const query = params.toString();
+        return this.request(`v3/trackors${query ? '?' + query : ''}`);
+      }
+
+      async getTrackor(id) {
+        return this.request(`v3/trackors/${id}`);
+      }
+    }
+
+    // React App
+    function App() {
+      const [status, setStatus] = useState({ type: 'loading', message: 'Initializing...' });
+      const [client, setClient] = useState(null);
+      const [trackors, setTrackors] = useState([]);
+      const [authInfo, setAuthInfo] = useState(null);
+
+      useEffect(() => {
+        initializeClient();
+      }, []);
+
+      async function initializeClient() {
+        try {
+          // Initialize auth
+          const auth = new WidgetAuth({
+            baseUrl: window.location.origin
+          });
+
+          // Test auth
+          const isAuth = await auth.isAuthenticated();
+          if (!isAuth) {
+            throw new Error('Authentication failed');
+          }
+
+          const token = await auth.getToken();
+          setAuthInfo({
+            authenticated: true,
+            tokenPreview: token.substring(0, 20) + '...',
+            inIframe: auth.isInIframe(),
+          });
+
+          // Create client
+          const oneVizionClient = new OneVizionClient({
+            baseUrl: window.location.origin,
+            auth: auth
+          });
+
+          setClient(oneVizionClient);
+          setStatus({ type: 'success', message: 'Widget authenticated successfully!' });
+        } catch (error) {
+          setStatus({ type: 'error', message: `Error: ${error.message}` });
+          console.error('Initialization error:', error);
+        }
+      }
+
+      async function loadTrackors() {
+        if (!client) return;
+
+        setStatus({ type: 'loading', message: 'Loading trackors...' });
+        try {
+          const data = await client.getTrackors({ perPage: 10 });
+          setTrackors(data);
+          setStatus({ type: 'success', message: `Loaded ${data.length} trackors` });
+        } catch (error) {
+          setStatus({ type: 'error', message: `Error loading trackors: ${error.message}` });
+          console.error('Load error:', error);
+        }
+      }
+
+      async function testApiCall() {
+        if (!client) return;
+
+        setStatus({ type: 'loading', message: 'Testing API call...' });
+        try {
+          const data = await client.getTrackors({ perPage: 1 });
+          setStatus({ type: 'success', message: 'API call successful!' });
+        } catch (error) {
+          setStatus({ type: 'error', message: `API error: ${error.message}` });
+        }
+      }
+
+      return (
+        <div>
+          <h1>OneVizion React Widget Test</h1>
+
+          <div className={`status ${status.type}`}>
+            {status.message}
+          </div>
+
+          {authInfo && (
+            <div style={{ marginTop: 20 }}>
+              <h3>Authentication Info</h3>
+              <pre>{JSON.stringify(authInfo, null, 2)}</pre>
+            </div>
+          )}
+
+          <div style={{ marginTop: 20 }}>
+            <button onClick={loadTrackors} disabled={!client}>
+              Load Trackors
+            </button>
+            <button onClick={testApiCall} disabled={!client}>
+              Test API Call
+            </button>
+          </div>
+
+          {trackors.length > 0 && (
+            <div className="trackor-list">
+              <h3>Trackors ({trackors.length})</h3>
+              {trackors.map((trackor, idx) => (
+                <div key={idx} className="trackor-item">
+                  <strong>ID:</strong> {trackor.id} |
+                  <strong> Type:</strong> {trackor.trackorType}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: 30, fontSize: 12, color: '#666' }}>
+            <h4>Debug Info</h4>
+            <p>In iframe: {window.self !== window.top ? 'Yes ✓' : 'No ✗'}</p>
+            <p>Origin: {window.location.origin}</p>
+            <p>
+              <strong>Check DevTools Network tab for:</strong><br/>
+              1. POST to /widget/GenerateApiTokenForWebSession<br/>
+              2. Header: X-CSRF-TOKEN<br/>
+              3. Response: {"{"}"token": "..."{"}"}<br/>
+              4. API calls with Authorization: Bearer ...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>

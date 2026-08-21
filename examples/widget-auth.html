@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OneVizion Widget Example</title>
+</head>
+<body>
+  <h1>OneVizion Widget Authentication Example</h1>
+  <div id="status">Loading...</div>
+  <div id="data"></div>
+
+  <script type="module">
+    import { OneVizionClient, widgetAuth } from '@onevizion/sdk';
+
+    async function main() {
+      const statusEl = document.getElementById('status');
+      const dataEl = document.getElementById('data');
+
+      try {
+        // Create client with widget authentication
+        // This will automatically extract CSRF token from parent iframe
+        const client = new OneVizionClient({
+          baseUrl: window.location.origin,
+          auth: widgetAuth({ baseUrl: window.location.origin }),
+        });
+
+        statusEl.textContent = 'Authenticated! Loading trackors...';
+
+        // Fetch some data
+        const trackors = await client.trackors.list({ perPage: 5 });
+
+        // Safe DOM manipulation (prevents XSS)
+        const h2 = document.createElement('h2');
+        h2.textContent = 'Recent Trackors';
+
+        const ul = document.createElement('ul');
+        trackors.forEach(t => {
+          const li = document.createElement('li');
+          // Use textContent to prevent XSS - even if API data contains <script> tags
+          li.textContent = `Trackor #${t.id} - ${t.trackorType}`;
+          ul.appendChild(li);
+        });
+
+        dataEl.innerHTML = ''; // Clear loading state
+        dataEl.appendChild(h2);
+        dataEl.appendChild(ul);
+
+        statusEl.textContent = 'Success!';
+      } catch (error) {
+        statusEl.textContent = `Error: ${error.message}`;
+        console.error('Widget error:', error);
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>

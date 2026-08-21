@@ -1,5 +1,5 @@
 import { type UseQueryOptions, type UseQueryResult, useQuery } from '@tanstack/react-query';
-import type { Trackor, TrackorFilters } from '../core/trackors.js';
+import type { Trackor, TrackorFilters, TrackorTypeTreeNode } from '../core/trackors.js';
 import type { Workflow, WorkflowExecution, WorkflowFilters } from '../core/workflows.js';
 import { useOneVizionClient } from './context.js';
 import { queryKeys } from './query-keys.js';
@@ -37,6 +37,73 @@ export function useTrackors(options?: UseTrackorsOptions): UseQueryResult<Tracko
   return useQuery({
     queryKey: queryKeys.trackors.list(options?.filters),
     queryFn: () => client.trackors.list(options?.filters),
+    ...options,
+  });
+}
+
+export interface UseTrackorSearchOptions
+  extends Omit<UseQueryOptions<Trackor[]>, 'queryKey' | 'queryFn'> {
+  view?: string;
+  fields?: string[];
+  page?: number;
+  perPage?: number;
+}
+
+/**
+ * Hook to search trackors using query builder
+ *
+ * @example
+ * ```tsx
+ * import { search } from '@onevizion/sdk';
+ *
+ * function MyComponent() {
+ *   const query = search().equal('STATUS', 'Active').and().greater('QUANTITY', 10);
+ *   const { data } = useTrackorSearch('ASSET', query);
+ * }
+ * ```
+ */
+export function useTrackorSearch(
+  trackorType: string,
+  searchQuery: string | { toString(): string },
+  options?: UseTrackorSearchOptions,
+): UseQueryResult<Trackor[]> {
+  const client = useOneVizionClient();
+
+  return useQuery({
+    queryKey: queryKeys.trackors.search(trackorType, searchQuery.toString(), options),
+    queryFn: () => client.trackors.search(trackorType, searchQuery, options),
+    ...options,
+  });
+}
+
+export type UseTrackorTreeOptions = Omit<
+  UseQueryOptions<TrackorTypeTreeNode>,
+  'queryKey' | 'queryFn'
+>;
+
+/**
+ * Hook to fetch the trackor type tree
+ *
+ * @example
+ * ```tsx
+ * function TrackorTypeSelector() {
+ *   const { data: tree, isLoading } = useTrackorTree();
+ *
+ *   if (isLoading) return <div>Loading...</div>;
+ *
+ *   return <TreeView data={tree} />;
+ * }
+ * ```
+ */
+export function useTrackorTree(
+  options?: UseTrackorTreeOptions,
+): UseQueryResult<TrackorTypeTreeNode> {
+  const client = useOneVizionClient();
+
+  return useQuery({
+    queryKey: queryKeys.trackors.tree(),
+    queryFn: () => client.trackors.getTree(),
+    staleTime: 1000 * 60 * 5, // Tree doesn't change often, cache 5 mins
     ...options,
   });
 }

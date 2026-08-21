@@ -41,20 +41,48 @@ export async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Retry a Result-returning function (functional approach)
+ */
+
+/**
+ * Type guard to check if value is an Error
+ */
+function isError(error: unknown): error is Error {
+  return error instanceof Error;
+}
+
+/**
+ * Type guard to check if error has a statusCode property
+ */
+function hasStatusCode(error: Error): error is Error & { statusCode: number } {
+  return (
+    'statusCode' in error && typeof (error as { statusCode?: unknown }).statusCode === 'number'
+  );
+}
+
+/**
+ * Legacy retry function for backward compatibility (throws)
+ * @deprecated Use withRetryResult for better error handling
+ */
 export async function withRetry<T>(
   fn: () => Promise<T>,
   config: Required<RetryConfig>,
   onRetry?: (attempt: number, error: Error) => void,
 ): Promise<T> {
-  let lastError: Error;
+  let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
-      lastError = error as Error;
+      // Proper type narrowing with type guard
+      if (!isError(error)) {
+        throw new Error(`Non-Error thrown: ${String(error)}`);
+      }
 
-      const statusCode = 'statusCode' in lastError ? (lastError.statusCode as number) : undefined;
+      lastError = error;
+      const statusCode = hasStatusCode(error) ? error.statusCode : undefined;
 
       if (!shouldRetry(statusCode, attempt, config)) {
         throw lastError;
@@ -68,6 +96,6 @@ export async function withRetry<T>(
     }
   }
 
-  // If we get here, all retries failed - throw the last error
-  throw lastError;
+  // Type-safe: throw only when we definitely have an error
+  throw lastError ?? new Error('Retry loop completed without error');
 }

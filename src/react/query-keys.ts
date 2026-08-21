@@ -15,6 +15,10 @@ export const queryKeys = {
     details: () => [...queryKeys.trackors.all, 'detail'] as const,
     detail: (id: number, fields?: string[]) =>
       [...queryKeys.trackors.details(), id, fields] as const,
+    searches: () => [...queryKeys.trackors.all, 'search'] as const,
+    search: (trackorType: string, query: string, options?: unknown) =>
+      [...queryKeys.trackors.searches(), trackorType, query, options] as const,
+    tree: () => [...queryKeys.trackors.all, 'tree'] as const,
   },
 
   // Workflows

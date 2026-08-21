@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Loader</title>
+</head>
+<body>
+  <div id="root">Loading widget...</div>
+
+  <script>
+    // Extract CSRF token from parent (same-origin)
+    const csrfToken = window.top.document.querySelector('meta[name="_csrf"]')?.getAttribute('content');
+
+    if (!csrfToken) {
+      document.getElementById('root').innerHTML = '<p style="color: red;">Error: CSRF token not found</p>';
+    } else {
+      // Exchange for bearer token
+      fetch('/widget/GenerateApiTokenForWebSession', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        credentials: 'include'
+      })
+      .then(res => res.json())
+      .then(data => {
+        // Store token for widget to use
+        window.__WIDGET_AUTH_TOKEN__ = data.token;
+        window.__WIDGET_BASE_URL__ = window.location.origin;
+
+        // Load widget via iframe instead (bypasses CORS for scripts)
+        const iframe = document.createElement('iframe');
+        iframe.src = 'https://7ae0-50-47-231-156.ngrok-free.app';
+        iframe.style.width = '100%';
+        iframe.style.height = '100vh';
+        iframe.style.border = 'none';
+        document.body.innerHTML = '';
+        document.body.appendChild(iframe);
+
+        // Pass token to iframe when it loads
+        iframe.onload = () => {
+          iframe.contentWindow.postMessage({
+            type: 'WIDGET_AUTH',
+            token: data.token,
+            baseUrl: window.location.origin
+          }, 'https://7ae0-50-47-231-156.ngrok-free.app');
+        };
+      })
+      .catch(err => {
+        document.getElementById('root').innerHTML = `<p style="color: red;">Auth failed: ${err.message}</p>`;
+      });
+    }
+  </script>
+</body>
+</html>
