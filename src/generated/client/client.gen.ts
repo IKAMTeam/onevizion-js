@@ -14,11 +14,6 @@ import {
   setAuthParams,
 } from './utils.gen';
 
-type ReqInit = Omit<RequestInit, 'body' | 'headers'> & {
-  body?: BodyInit | Record<string, unknown> | null;
-  headers: ReturnType<typeof mergeHeaders>;
-};
-
 export const createClient = (config: Config = {}): Client => {
   let _config = mergeConfigs(createConfig(), config);
 
@@ -44,8 +39,12 @@ export const createClient = (config: Config = {}): Client => {
       ...options,
       fetch: options.fetch ?? _config.fetch ?? globalThis.fetch,
       headers: mergeHeaders(_config.headers, options.headers),
-      serializedBody: undefined as string | undefined,
-    };
+    } as typeof _config &
+      typeof options & {
+        fetch: typeof fetch;
+        headers: Headers;
+        serializedBody?: string;
+      };
 
     if (opts.security) {
       await setAuthParams(opts);
@@ -56,7 +55,10 @@ export const createClient = (config: Config = {}): Client => {
     }
 
     if (opts.body !== undefined && opts.bodySerializer) {
-      opts.serializedBody = opts.bodySerializer(opts.body) as string | undefined;
+      const serialized = opts.bodySerializer(opts.body) as string | undefined;
+      if (serialized !== undefined) {
+        opts.serializedBody = serialized;
+      }
     }
 
     // remove Content-Type header if body is empty to avoid sending invalid requests
@@ -80,10 +82,21 @@ export const createClient = (config: Config = {}): Client => {
 
     try {
       const { opts, url } = await beforeRequest(options);
-      const requestInit: ReqInit = {
-        redirect: 'follow',
-        ...opts,
-        body: getValidRequestBody(opts),
+      const body = getValidRequestBody(opts) as BodyInit | null;
+      const requestInit: RequestInit = {
+        ...(opts.cache !== undefined && { cache: opts.cache }),
+        ...(opts.credentials !== undefined && { credentials: opts.credentials }),
+        headers: opts.headers,
+        ...(opts.integrity !== undefined && { integrity: opts.integrity }),
+        ...(opts.keepalive !== undefined && { keepalive: opts.keepalive }),
+        ...(opts.method !== undefined && { method: opts.method }),
+        ...(opts.mode !== undefined && { mode: opts.mode }),
+        redirect: opts.redirect ?? 'follow',
+        ...(opts.referrer !== undefined && { referrer: opts.referrer }),
+        ...(opts.referrerPolicy !== undefined && { referrerPolicy: opts.referrerPolicy }),
+        ...(opts.signal !== undefined && { signal: opts.signal }),
+        ...(opts.window !== undefined && { window: opts.window }),
+        ...(body !== null && { body }),
       };
 
       request = new Request(url, requestInit);
@@ -236,10 +249,25 @@ export const createClient = (config: Config = {}): Client => {
 
   const makeSseFn = (method: Uppercase<HttpMethod>) => async (options: RequestOptions) => {
     const { opts, url } = await beforeRequest(options);
+    const body = opts.body as BodyInit | null | undefined;
+    const serializedBody = getValidRequestBody(opts) as BodyInit | null | undefined;
     return createSseClient({
-      ...opts,
-      body: opts.body as BodyInit | null | undefined,
+      fetch: opts.fetch,
+      ...(opts.cache !== undefined && { cache: opts.cache }),
+      ...(opts.credentials !== undefined && { credentials: opts.credentials }),
+      ...(opts.headers !== undefined && { headers: opts.headers }),
+      ...(opts.integrity !== undefined && { integrity: opts.integrity }),
+      ...(opts.keepalive !== undefined && { keepalive: opts.keepalive }),
+      ...(opts.mode !== undefined && { mode: opts.mode }),
+      ...(opts.redirect !== undefined && { redirect: opts.redirect }),
+      ...(opts.referrer !== undefined && { referrer: opts.referrer }),
+      ...(opts.referrerPolicy !== undefined && { referrerPolicy: opts.referrerPolicy }),
+      ...(opts.signal !== undefined && { signal: opts.signal }),
+      ...(opts.window !== undefined && { window: opts.window }),
+      ...(body !== undefined && { body }),
       method,
+      ...(opts.responseTransformer !== undefined && { responseTransformer: opts.responseTransformer }),
+      ...(opts.responseValidator !== undefined && { responseValidator: opts.responseValidator }),
       onRequest: async (url, init) => {
         let request = new Request(url, init);
         for (const fn of interceptors.request.fns) {
@@ -249,7 +277,10 @@ export const createClient = (config: Config = {}): Client => {
         }
         return request;
       },
-      serializedBody: getValidRequestBody(opts) as BodyInit | null | undefined,
+      ...(serializedBody !== undefined && { serializedBody }),
+      ...(opts.sseDefaultRetryDelay !== undefined && { sseDefaultRetryDelay: opts.sseDefaultRetryDelay }),
+      ...(opts.sseMaxRetryAttempts !== undefined && { sseMaxRetryAttempts: opts.sseMaxRetryAttempts }),
+      ...(opts.sseMaxRetryDelay !== undefined && { sseMaxRetryDelay: opts.sseMaxRetryDelay }),
       url,
     });
   };

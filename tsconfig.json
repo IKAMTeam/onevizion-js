@@ -41,5 +41,5 @@
     }
   },
   "include": ["src/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist", "examples", "src/generated"]
+  "exclude": ["node_modules", "dist", "examples"]
 }

@@ -96,7 +96,11 @@ export function createSseClient<TData = unknown>({
 
   const sleep = sseSleepFn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
 
-  const createStream = async function* () {
+  const createStream = async function* (): AsyncGenerator<
+    TData extends Record<string, unknown> ? TData[keyof TData] : TData,
+    void,
+    unknown
+  > {
     let retryDelay: number = sseDefaultRetryDelay ?? 3000;
     let attempt = 0;
     const signal = options.signal ?? new AbortController().signal;
@@ -119,7 +123,7 @@ export function createSseClient<TData = unknown>({
         const requestInit: RequestInit = {
           redirect: 'follow',
           ...options,
-          body: options.serializedBody,
+          ...(options.serializedBody !== undefined && { body: options.serializedBody }),
           headers,
           signal,
         };
@@ -205,13 +209,13 @@ export function createSseClient<TData = unknown>({
 
               onSseEvent?.({
                 data,
-                event: eventName,
-                id: lastEventId,
+                ...(eventName !== undefined && { event: eventName }),
+                ...(lastEventId !== undefined && { id: lastEventId }),
                 retry: retryDelay,
               });
 
               if (dataLines.length) {
-                yield data as TData;
+                yield data as TData extends Record<string, unknown> ? TData[keyof TData] : TData;
               }
             }
           }
