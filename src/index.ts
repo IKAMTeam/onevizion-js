@@ -1,11 +1,11 @@
 /**
  * @onevizion/sdk - TypeScript SDK for the OneVizion API
  *
- * Pragmatic, functional TypeScript SDK with:
- * - Immutable, readonly types
- * - Pure functions (no hidden mutations)
- * - Type-safe generics and branded types
- * - Discriminated unions for state
+ * Modern, type-safe TypeScript SDK with:
+ * - Complete API coverage via code generation
+ * - Type-safe requests and responses
+ * - Multiple authentication methods (Widget, Token, Credentials)
+ * - Retry logic and error handling
  * - Promise-based (works with TanStack Query, SWR, etc.)
  * - Tree-shakeable, minimal bundle size
  *
@@ -13,7 +13,7 @@
  */
 
 // Main client
-export { OneVizionClient } from './client.js';
+export { OneVizionClient } from './sdk-client.js';
 
 // Authentication
 export {
@@ -26,20 +26,6 @@ export {
 } from './auth/index.js';
 
 export type { WidgetAuthConfig, CredentialsAuthConfig } from './auth/index.js';
-
-// Core resources
-export { TrackorsClient, WorkflowsClient } from './core/index.js';
-
-export type {
-  Trackor,
-  TrackorFilters,
-  CreateTrackorData,
-  UpdateTrackorData,
-  Workflow,
-  WorkflowFilters,
-  ExecuteWorkflowData,
-  WorkflowExecution,
-} from './core/index.js';
 
 // Types
 export type {
@@ -65,5 +51,9 @@ export {
   isRetryable,
 } from './utils/errors.js';
 
-// Query builder
-export { search, SearchQuery } from './utils/query-builder.js';
+// Query builder (fluent search API)
+export { search, type SearchQuery } from './utils/query-builder.js';
+
+// Re-export generated types and client for direct access
+export type { Client } from './generated/client/types.gen.js';
+export type * from './generated/types.gen.js';

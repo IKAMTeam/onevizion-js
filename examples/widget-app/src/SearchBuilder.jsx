@@ -1,5 +1,11 @@
-import { OneVizionClient, search, widgetAuth } from '@onevizion/sdk';
+import { OneVizionClient, search } from '@onevizion/sdk';
+import { AgGridReact } from 'ag-grid-react';
+import 'ag-grid-community/styles/ag-grid.css';
+import 'ag-grid-community/styles/ag-theme-alpine.css';
+import { SearchLg, PlusCircle, XClose } from '@untitledui/icons';
 import { useEffect, useState } from 'react';
+import { ComboBox, Input, Label, ListBox, ListBoxItem, Popover, Button as AriaButton } from 'react-aria-components';
+import { ProxyHttpClient } from './proxyHttpClient';
 
 // Flatten tree into list of trackor types
 function flattenTree(node, list = []) {
@@ -11,18 +17,44 @@ function flattenTree(node, list = []) {
 }
 
 export function SearchBuilder() {
-  const [authConfig, setAuthConfig] = useState(null);
+  const [client, setClient] = useState(null);
+  const [trackorTypes, setTrackorTypes] = useState([]);
+  const [selectedType, setSelectedType] = useState(null);
+  const [fields, setFields] = useState([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+  const [loadingFields, setLoadingFields] = useState(false);
 
-  // Listen for token from parent loader
+  const [conditions, setConditions] = useState([]);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // New condition form
+  const [field, setField] = useState('');
+  const [operator, setOperator] = useState('equal');
+  const [value, setValue] = useState('');
+
+  // Listen for auth from parent
   useEffect(() => {
     const handleMessage = (event) => {
       if (event.data.type === 'WIDGET_AUTH') {
-        window.__WIDGET_AUTH_TOKEN__ = event.data.token;
-        window.__WIDGET_BASE_URL__ = event.data.baseUrl;
-        setAuthConfig({
-          baseUrl: event.data.baseUrl,
-          auth: { getToken: async () => event.data.token },
-        });
+        const proxyHttp = new ProxyHttpClient(event.data.baseUrl);
+        const newClient = {
+          trackors: {
+            getTree: () => proxyHttp.get('v3/trackor_tree'),
+            search: (trackorType, query, options) => {
+              const params = new URLSearchParams();
+              if (options?.perPage) params.set('perPage', String(options.perPage));
+              const path = `v3/trackor_types/${trackorType}/trackors/search${params.toString() ? '?' + params : ''}`;
+              const searchExpression = typeof query === 'string' ? query : query.toString();
+              return proxyHttp.post(path, searchExpression, { contentType: 'text/plain' });
+            }
+          },
+          trackorTypes: {
+            getViews: (trackorType) => proxyHttp.get(`v3/trackor_types/${trackorType}/views`),
+            getView: (trackorType, viewName) => proxyHttp.get(`v3/trackor_types/${trackorType}/views/${viewName}`)
+          }
+        };
+        setClient(newClient);
       }
     };
 
@@ -30,50 +62,17 @@ export function SearchBuilder() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const [client] = useState(() => {
-    // Use pre-fetched token if already available
-    const token = window.__WIDGET_AUTH_TOKEN__;
-    const baseUrl = window.__WIDGET_BASE_URL__ || window.location.origin;
-
-    return new OneVizionClient({
-      baseUrl,
-      auth: token ? { getToken: async () => token } : widgetAuth({ baseUrl }),
-    });
-  });
-
-  // Update client when auth config arrives
+  // Load trackor types
   useEffect(() => {
-    if (authConfig && client) {
-      // Reinitialize with new auth
-      Object.assign(client, new OneVizionClient(authConfig));
-    }
-  }, [authConfig, client]);
+    if (!client) return;
 
-  const [trackorTypes, setTrackorTypes] = useState([]);
-  const [trackorType, setTrackorType] = useState('');
-  const [field, setField] = useState('STATUS');
-  const [operator, setOperator] = useState('equal');
-  const [value, setValue] = useState('');
-  const [conditions, setConditions] = useState([]);
-  const [results, setResults] = useState([]);
-  const [queryString, setQueryString] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingTypes, setLoadingTypes] = useState(true);
-
-  // Load trackor types on mount
-  useEffect(() => {
     const loadTypes = async () => {
       try {
         const tree = await client.trackors.getTree();
         const types = flattenTree(tree);
         setTrackorTypes(types);
-        if (types.length > 0) {
-          setTrackorType(types[0].name);
-        }
       } catch (err) {
         console.error('Failed to load trackor types:', err);
-        setError('Failed to load trackor types');
       } finally {
         setLoadingTypes(false);
       }
@@ -81,228 +80,252 @@ export function SearchBuilder() {
     loadTypes();
   }, [client]);
 
+  // Load fields when results come back (use result fields as suggestions)
+  useEffect(() => {
+    if (results.length > 0 && results[0].fields) {
+      const fieldNames = Object.keys(results[0].fields);
+      setFields(fieldNames);
+    }
+  }, [results]);
+
   const addCondition = () => {
+    if (!field) return;
     const needsValue = !['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator);
-    if (!field || (needsValue && !value)) return;
+    if (needsValue && !value) return;
 
     setConditions([...conditions, { field, operator, value }]);
+    setField('');
     setValue('');
   };
 
-  const removeCondition = (index) => {
-    setConditions(conditions.filter((_, i) => i !== index));
+  const removeCondition = (idx) => {
+    setConditions(conditions.filter((_, i) => i !== idx));
   };
 
   const executeSearch = async () => {
-    if (conditions.length === 0) {
-      setError('Add at least one condition');
-      return;
-    }
-
     setLoading(true);
-    setError(null);
-
     try {
-      let query = search();
+      let query;
 
-      conditions.forEach((c, i) => {
-        if (i > 0) query = query.and();
+      if (conditions.length > 0) {
+        query = search();
+        conditions.forEach((c, i) => {
+          if (i > 0) query = query.and();
+          switch (c.operator) {
+            case 'equal': query = query.equal(c.field, c.value); break;
+            case 'notEqual': query = query.notEqual(c.field, c.value); break;
+            case 'greater': query = query.greater(c.field, parseFloat(c.value) || c.value); break;
+            case 'less': query = query.less(c.field, parseFloat(c.value) || c.value); break;
+            case 'isNull': query = query.isNull(c.field); break;
+            case 'isNotNull': query = query.isNotNull(c.field); break;
+            case 'thisWeek': query = query.thisWeek(c.field); break;
+            case 'thisMonth': query = query.thisMonth(c.field); break;
+          }
+        });
+      } else {
+        query = '';
+      }
 
-        switch (c.operator) {
-          case 'equal':
-            query = query.equal(c.field, c.value);
-            break;
-          case 'notEqual':
-            query = query.notEqual(c.field, c.value);
-            break;
-          case 'greater':
-            query = query.greater(c.field, parseFloat(c.value) || c.value);
-            break;
-          case 'less':
-            query = query.less(c.field, parseFloat(c.value) || c.value);
-            break;
-          case 'isNull':
-            query = query.isNull(c.field);
-            break;
-          case 'isNotNull':
-            query = query.isNotNull(c.field);
-            break;
-          case 'thisWeek':
-            query = query.thisWeek(c.field);
-            break;
-          case 'thisMonth':
-            query = query.thisMonth(c.field);
-            break;
-        }
-      });
-
-      const queryStr = query.toString();
-      setQueryString(queryStr);
-
-      const data = await client.trackors.search(trackorType, query, { perPage: 10 });
+      const data = await client.trackors.search(selectedType, query, { perPage: 1000 });
       setResults(data);
     } catch (err) {
-      setError(err.message || 'Search failed');
-      setResults([]);
+      console.error('Search failed:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const reset = () => {
-    setConditions([]);
-    setResults([]);
-    setQueryString('');
-    setError(null);
-  };
+  // AG Grid columns
+  const columns = results[0]?.fields ?
+    Object.keys(results[0].fields).map(key => ({
+      field: `fields.${key}`,
+      headerName: key,
+      sortable: true,
+      filter: true,
+      resizable: true,
+    }))
+    : [];
+
+  if (!client) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-gray-600">Authenticating...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="container">
-      <h1>OneVizion Search Builder</h1>
-      <p style={{ color: '#666' }}>Build and execute trackor searches with visual query builder</p>
-
-      <div className="card">
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-          Trackor Type:
-        </label>
-        {loadingTypes ? (
-          <p>Loading trackor types...</p>
-        ) : (
-          <select
-            value={trackorType}
-            onChange={(e) => setTrackorType(e.target.value)}
-            style={{ width: '300px', padding: '8px' }}
-          >
-            {trackorTypes.map((type) => (
-              <option key={type.name} value={type.name}>
-                {type.label} ({type.name})
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add Search Condition</h3>
-
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            value={field}
-            onChange={(e) => setField(e.target.value.toUpperCase())}
-            placeholder="Field (e.g., STATUS)"
-            style={{ flex: 1, minWidth: '150px' }}
-          />
-
-          <select
-            value={operator}
-            onChange={(e) => setOperator(e.target.value)}
-            style={{ minWidth: '150px' }}
-          >
-            <option value="equal">Equal</option>
-            <option value="notEqual">Not Equal</option>
-            <option value="greater">Greater</option>
-            <option value="less">Less</option>
-            <option value="isNull">Is Null</option>
-            <option value="isNotNull">Is Not Null</option>
-            <option value="thisWeek">This Week</option>
-            <option value="thisMonth">This Month</option>
-          </select>
-
-          {!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) && (
-            <input
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="Value"
-              style={{ flex: 1, minWidth: '150px' }}
-            />
-          )}
-
-          <button className="btn-primary" onClick={addCondition}>
-            Add
-          </button>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-semibold text-gray-900">Search Builder</h1>
+          <p className="text-lg text-gray-600 mt-2">Build and execute trackor searches</p>
         </div>
 
-        {conditions.length > 0 && (
-          <div>
-            <strong>Conditions:</strong>
-            {conditions.map((c, i) => (
-              <div className="condition" key={i}>
-                <span style={{ flex: 1 }}>
-                  {i > 0 && <strong style={{ color: '#666', marginRight: '5px' }}>AND</strong>}
-                  <code>
-                    {c.field} {c.operator} {c.value || ''}
-                  </code>
-                </span>
-                <button
-                  className="btn-danger"
-                  onClick={() => removeCondition(i)}
-                  style={{ padding: '4px 8px', fontSize: '12px' }}
+        {/* Step 1: Select Trackor Type */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+            Step 1: Select Trackor Type
+          </h3>
+
+          <ComboBox
+            selectedKey={selectedType}
+            onSelectionChange={setSelectedType}
+            className="w-full"
+          >
+            <Label className="block text-sm font-medium text-gray-700 mb-2">Trackor Type</Label>
+            <div className="relative">
+              <Input className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+            </div>
+            <Popover className="w-[--trigger-width] bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-auto">
+              <ListBox className="p-1">
+                {trackorTypes.map((type) => (
+                  <ListBoxItem
+                    key={type.name}
+                    id={type.name}
+                    className="px-3 py-2 rounded cursor-pointer hover:bg-gray-100 focus:bg-blue-50 focus:outline-none"
+                  >
+                    <div className="font-medium text-gray-900">{type.label}</div>
+                    <div className="text-sm text-gray-500">{type.name}</div>
+                  </ListBoxItem>
+                ))}
+              </ListBox>
+            </Popover>
+          </ComboBox>
+        </div>
+
+        {/* Step 2: Build Search */}
+        {selectedType && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">
+              Step 2: Add Conditions
+            </h3>
+
+            <div className="grid grid-cols-12 gap-4 mb-6">
+              {/* Field Combobox */}
+              <div className="col-span-4">
+                <ComboBox
+                  inputValue={field}
+                  onInputChange={setField}
+                  allowsCustomValue
+                  className="w-full"
                 >
-                  ×
+                  <Label className="block text-sm font-medium text-gray-700 mb-2">Field</Label>
+                  <Input className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <Popover className="w-[--trigger-width] bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-auto">
+                    <ListBox className="p-1">
+                      {fields.map((f) => (
+                        <ListBoxItem
+                          key={f}
+                          id={f}
+                          className="px-3 py-2 rounded cursor-pointer hover:bg-gray-100 focus:bg-blue-50 focus:outline-none"
+                        >
+                          {f}
+                        </ListBoxItem>
+                      ))}
+                    </ListBox>
+                  </Popover>
+                </ComboBox>
+              </div>
+
+              {/* Operator */}
+              <div className="col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Operator</label>
+                <select
+                  value={operator}
+                  onChange={(e) => setOperator(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="equal">Equal</option>
+                  <option value="notEqual">Not Equal</option>
+                  <option value="greater">Greater</option>
+                  <option value="less">Less</option>
+                  <option value="isNull">Is Null</option>
+                  <option value="isNotNull">Is Not Null</option>
+                  <option value="thisWeek">This Week</option>
+                  <option value="thisMonth">This Month</option>
+                </select>
+              </div>
+
+              {/* Value */}
+              {!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) && (
+                <div className="col-span-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Value</label>
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              {/* Add Button */}
+              <div className={`${!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) ? 'col-span-1' : 'col-span-5'} flex items-end`}>
+                <button
+                  onClick={addCondition}
+                  className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium"
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  Add
                 </button>
               </div>
-            ))}
+            </div>
+
+            {/* Conditions List */}
+            {conditions.length > 0 && (
+              <div className="space-y-2 mb-6">
+                <div className="text-sm font-medium text-gray-700 mb-3">Active Conditions:</div>
+                {conditions.map((c, i) => (
+                  <div key={i} className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    {i > 0 && <span className="text-sm font-semibold text-blue-600 px-2">AND</span>}
+                    <code className="flex-1 text-sm font-mono text-gray-800">{c.field} {c.operator} {c.value}</code>
+                    <button
+                      onClick={() => removeCondition(i)}
+                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                    >
+                      <XClose className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Search Button */}
+            <button
+              onClick={executeSearch}
+              disabled={loading}
+              className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 font-semibold text-lg shadow-sm"
+            >
+              <SearchLg className="w-6 h-6" />
+              {loading ? 'Searching...' : conditions.length ? 'Search' : 'Load All Trackors'}
+            </button>
           </div>
         )}
 
-        <div style={{ marginTop: '15px', display: 'flex', gap: '10px' }}>
-          <button
-            className="btn-success"
-            onClick={executeSearch}
-            disabled={conditions.length === 0 || loading}
-          >
-            {loading ? 'Searching...' : 'Search'}
-          </button>
-          <button className="btn-secondary" onClick={reset}>
-            Reset
-          </button>
-        </div>
+        {/* Results Grid */}
+        {results.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Results ({results.length})
+            </h3>
+            <div className="ag-theme-alpine rounded-lg overflow-hidden" style={{ height: 500, width: '100%' }}>
+              <AgGridReact
+                rowData={results}
+                columnDefs={columns}
+                defaultColDef={{
+                  sortable: true,
+                  filter: true,
+                  resizable: true,
+                }}
+                pagination={true}
+                paginationPageSize={20}
+              />
+            </div>
+          </div>
+        )}
       </div>
-
-      {queryString && (
-        <div className="card">
-          <strong>Generated Query:</strong>
-          <pre>{queryString}</pre>
-        </div>
-      )}
-
-      {error && <div className="error">{error}</div>}
-
-      {results.length > 0 && (
-        <div className="card">
-          <h3>Results ({results.length})</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Type</th>
-                <th>Fields</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((t) => (
-                <tr key={t.id}>
-                  <td>{t.id}</td>
-                  <td>{t.trackorType}</td>
-                  <td>
-                    <pre style={{ margin: 0, fontSize: '11px' }}>
-                      {JSON.stringify(t.fields, null, 2)}
-                    </pre>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {queryString && !loading && !error && results.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', color: '#666' }}>
-          No results found
-        </div>
-      )}
     </div>
   );
 }

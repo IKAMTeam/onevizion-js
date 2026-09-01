@@ -1,0 +1,45 @@
+import { describe, expect } from 'vitest';
+import { createTestClient, skipIfNoIntegration } from './setup.js';
+
+describe('Trackors Integration', () => {
+  const client = createTestClient();
+
+  skipIfNoIntegration('should fetch trackor tree', async () => {
+    const tree = await client.trackors.getTree();
+
+    expect(tree).toBeDefined();
+    expect(tree.name).toBeDefined();
+    expect(tree.label).toBeDefined();
+  });
+
+  skipIfNoIntegration('should search trackors', async () => {
+    // Get first trackor type from tree
+    const tree = await client.trackors.getTree();
+    const firstType = tree.children?.[0]?.name || tree.name;
+
+    // Search with no conditions (get all)
+    const trackors = await client.trackors.search(firstType, '', { perPage: 10 });
+
+    expect(Array.isArray(trackors)).toBe(true);
+    expect(trackors.length).toBeGreaterThanOrEqual(0);
+    expect(trackors.length).toBeLessThanOrEqual(10);
+  });
+
+  skipIfNoIntegration('should get trackor by id', async () => {
+    // Get first trackor from search
+    const tree = await client.trackors.getTree();
+    const firstType = tree.children?.[0]?.name || tree.name;
+    const trackors = await client.trackors.search(firstType, '', { perPage: 1 });
+
+    if (trackors.length === 0) {
+      console.log('No trackors found, skipping get test');
+      return;
+    }
+
+    const trackor = await client.trackors.get(trackors[0].id);
+
+    expect(trackor).toBeDefined();
+    expect(trackor.id).toBe(trackors[0].id);
+    expect(trackor.trackorType).toBeDefined();
+  });
+});

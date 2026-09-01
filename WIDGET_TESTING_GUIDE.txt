@@ -1,0 +1,330 @@
+======================================================================
+HOW TO TEST YOUR REACT WIDGET IN ONEVIZION
+======================================================================
+
+QUICK START (5 minutes)
+----------------------------------------------------------------------
+
+1. BUILD THE WIDGET
+
+   npm run build
+
+   # Or use the example directly:
+   cp examples/react-widget-test.html dist/
+
+2. SERVE LOCALLY
+
+   npx serve dist -p 3000
+   # Widget accessible at: http://localhost:3000/react-widget-test.html
+
+3. CREATE CLOUDFLARED TUNNEL
+
+   cloudflared tunnel --url http://localhost:3000
+
+   # Output will show something like:
+   # https://abc-def-123.trycloudflare.com
+
+   Copy this URL!
+
+4. CREATE WIDGET IN ONEVIZION
+
+   a. Login to OneVizion
+   b. Go to: Admin → Widgets
+   c. Click "Create Widget"
+   d. Fill in:
+      - Name: "React Widget Test"
+      - URL: https://abc-def-123.trycloudflare.com/react-widget-test.html
+      - Sandbox: allow-same-origin allow-scripts
+   e. Save
+
+5. ADD WIDGET TO DASHBOARD
+
+   a. Go to any dashboard
+   b. Add widget → Select "React Widget Test"
+   c. Widget loads in iframe
+
+6. VERIFY IT WORKS
+
+   Open DevTools (F12) → Network tab
+
+   You should see:
+   ✓ POST to /widget/GenerateApiTokenForWebSession
+   ✓ Request header: X-CSRF-TOKEN: <token-from-parent>
+   ✓ Response: {"token": "bearer-token-here"}
+   ✓ Subsequent API calls have: Authorization: Bearer <token>
+
+   Widget should show:
+   ✓ "Widget authenticated successfully!"
+   ✓ Authentication Info with token preview
+   ✓ Buttons to load trackors
+
+======================================================================
+WHAT THE WIDGET DOES
+======================================================================
+
+1. AUTHENTICATION FLOW:
+   - Detects it's in an iframe
+   - Extracts CSRF token from parent: window.top.document.querySelector('meta[name="_csrf"]')
+   - POSTs to /widget/GenerateApiTokenForWebSession with CSRF header
+   - Receives bearer token
+   - Caches token for 1 hour
+
+2. API CALLS:
+   - Uses bearer token for all API requests
+   - Example: GET /api/v3/trackors
+   - Handles errors gracefully
+
+3. UI FEATURES:
+   - Shows authentication status
+   - Displays token preview (first 20 chars)
+   - Button to load trackors
+   - Button to test API call
+   - Shows debug info
+
+======================================================================
+TROUBLESHOOTING
+======================================================================
+
+PROBLEM: "Not in iframe"
+SOLUTION: Widget must be embedded in OneVizion dashboard, not opened directly
+
+PROBLEM: "Cannot access parent document"
+SOLUTION: Check sandbox attributes include "allow-same-origin"
+
+PROBLEM: "CSRF token not found"
+SOLUTION:
+  - Verify you're on a real OneVizion page
+  - Check parent has: <meta name="_csrf" content="...">
+  - Try: console.log(window.top.document.querySelector('meta[name="_csrf"]'))
+
+PROBLEM: "Token exchange failed: 401"
+SOLUTION:
+  - CSRF token might be expired
+  - Reload the OneVizion page
+  - Check CSRF token is being sent in headers
+
+PROBLEM: "Network error" / CORS
+SOLUTION:
+  - Must use HTTPS (cloudflared provides this)
+  - Widget URL must be same origin or CORS-enabled
+  - Check cloudflared tunnel is running
+
+PROBLEM: Widget shows in dev but not in OneVizion
+SOLUTION:
+  - Cloudflared tunnel might have expired (restart it)
+  - Check widget URL is correct
+  - Verify sandbox attributes set
+
+======================================================================
+DEVTOOLS DEBUGGING
+======================================================================
+
+CONSOLE COMMANDS TO TRY:
+
+# Check if in iframe
+window.self !== window.top
+
+# Check CSRF token
+window.top.document.querySelector('meta[name="_csrf"]')?.getAttribute('content')
+
+# Manual token exchange (test endpoint)
+fetch('/widget/GenerateApiTokenForWebSession', {
+  method: 'POST',
+  headers: {
+    'X-CSRF-TOKEN': window.top.document.querySelector('meta[name="_csrf"]').getAttribute('content'),
+    'Content-Type': 'application/x-www-form-urlencoded'
+  },
+  credentials: 'include'
+}).then(r => r.json()).then(console.log)
+
+# Test API call with token
+fetch('/api/v3/trackors?perPage=1', {
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+  }
+}).then(r => r.json()).then(console.log)
+
+======================================================================
+NETWORK TAB - WHAT TO LOOK FOR
+======================================================================
+
+1. TOKEN EXCHANGE REQUEST:
+   URL: /widget/GenerateApiTokenForWebSession
+   Method: POST
+   Headers:
+     X-CSRF-TOKEN: <from-parent>
+     Content-Type: application/x-www-form-urlencoded
+   Credentials: include
+
+2. TOKEN RESPONSE:
+   Status: 200 OK
+   Body: {"token": "eyJ..."}
+
+3. API REQUEST:
+   URL: /api/v3/trackors
+   Method: GET
+   Headers:
+     Authorization: Bearer eyJ...
+
+4. API RESPONSE:
+   Status: 200 OK
+   Body: [array of trackors]
+
+======================================================================
+USING YOUR BUILT SDK INSTEAD
+======================================================================
+
+If you want to test with your actual built SDK:
+
+1. Build SDK:
+   npm run build
+
+2. Create widget HTML that imports your SDK:
+
+   <script type="module">
+   import { OneVizionClient, widgetAuth } from './dist/index.js';
+
+   const client = new OneVizionClient({
+     baseUrl: window.location.origin,
+     auth: widgetAuth({ baseUrl: window.location.origin })
+   });
+
+   // Use client...
+   </script>
+
+3. Follow same cloudflared tunnel steps
+
+NOTE: The example widget includes inline auth implementation
+      to be self-contained and easy to test.
+
+======================================================================
+ADVANCED: LOCAL HTTPS (Alternative to Cloudflared)
+======================================================================
+
+If you prefer local HTTPS without tunnel:
+
+1. Generate self-signed cert:
+   openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
+
+2. Serve with HTTPS:
+   npx http-server dist -p 3000 -S -C cert.pem -K key.pem
+
+3. In OneVizion, use:
+   https://localhost:3000/react-widget-test.html
+
+   (You'll need to accept self-signed cert warning)
+
+NOTE: Cloudflared is easier and doesn't require cert warnings.
+
+======================================================================
+CONTINUOUS DEVELOPMENT WORKFLOW
+======================================================================
+
+For fast iteration:
+
+Terminal 1:
+  npm run dev              # Watch mode for SDK builds
+
+Terminal 2:
+  npx serve dist -p 3000   # Serve files
+
+Terminal 3:
+  cloudflared tunnel --url http://localhost:3000
+  # Keep this running, URL stays same
+
+Then:
+  1. Edit code
+  2. Reload widget in browser
+  3. Check DevTools
+  4. Iterate!
+
+======================================================================
+PRODUCTION DEPLOYMENT
+======================================================================
+
+When ready for production:
+
+1. Build production bundle:
+   npm run build
+
+2. Upload widget HTML to OneVizion:
+   - Use real HTTPS URL (not cloudflared)
+   - Update widget URL to production URL
+   - Remove debug UI elements
+
+3. Widget auth will work automatically because:
+   - Same origin (hosted on OneVizion)
+   - CSRF token available
+   - /widget/GenerateApiTokenForWebSession endpoint exists
+
+======================================================================
+
+======================================================================
+TESTING THE SEARCH BUILDER WIDGET
+======================================================================
+
+The search builder (examples/react-search-builder.html) is an interactive
+demo that shows:
+1. Dynamic query building with visual UI
+2. Real-time query string generation  
+3. Live trackor search execution
+4. Results display
+
+HOW IT WORKS:
+
+1. User enters trackor type (e.g., "ASSET")
+2. Adds search conditions via dropdown:
+   - Field name (e.g., "STATUS")
+   - Operator (equal, greater, isNull, etc.)
+   - Value (if needed)
+3. Clicks "Search" to execute
+4. Shows generated query AND results
+
+QUERY BUILDER FEATURES:
+
+- Equal / Not Equal
+- Greater / Less Than
+- Is Null / Is Not Null
+- Greater Than Today (with offset)
+- This Week / This Month
+- AND logic between conditions
+
+TESTING WITH CLOUDFLARED:
+
+1. Build & serve:
+   npm run build
+   npx serve examples -p 3000
+
+2. Tunnel:
+   cloudflared tunnel --url http://localhost:3000
+
+3. Create widget in OneVizion:
+   URL: https://xyz.trycloudflare.com/react-search-builder.html
+   Sandbox: allow-same-origin allow-scripts
+
+4. Add to dashboard and test:
+   - Try: ASSET trackor with STATUS equal "Active"
+   - Try: Multiple conditions with AND logic
+   - Check DevTools Network tab for:
+     * POST /widget/GenerateApiTokenForWebSession (gets bearer token)
+     * POST /api/v3/trackor_types/ASSET/trackors/search (search request)
+     * Request body shows the generated query string
+
+EXAMPLE QUERIES TO TRY:
+
+1. Simple:
+   STATUS equal "Active"
+   -> equal(STATUS, "Active")
+
+2. Range:
+   AMOUNT greater 1000
+   AND STATUS equal "Approved"
+   -> greater(AMOUNT, 1000) and equal(STATUS, "Approved")
+
+3. Date-based:
+   CREATED_DATE greaterThanToday +0
+   -> gt_today(CREATED_DATE, +0)
+
+The widget automatically builds the query string and sends it to OneVizion!
+
+======================================================================

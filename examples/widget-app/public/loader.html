@@ -9,6 +9,9 @@
   <div id="root">Loading widget...</div>
 
   <script>
+    // Get the real origin from parent window
+    const parentOrigin = window.top.location.origin;
+
     // Extract CSRF token from parent (same-origin)
     const csrfToken = window.top.document.querySelector('meta[name="_csrf"]')?.getAttribute('content');
 
@@ -16,7 +19,7 @@
       document.getElementById('root').innerHTML = '<p style="color: red;">Error: CSRF token not found</p>';
     } else {
       // Exchange for bearer token
-      fetch('/widget/GenerateApiTokenForWebSession', {
+      fetch(`${parentOrigin}/widget/GenerateApiTokenForWebSession`, {
         method: 'POST',
         headers: {
           'X-CSRF-TOKEN': csrfToken,
@@ -24,11 +27,16 @@
         },
         credentials: 'include'
       })
-      .then(res => res.json())
+      .then(res => {
+        console.log('Token exchange response:', res);
+        return res.json();
+      })
       .then(data => {
-        // Store token for widget to use
-        window.__WIDGET_AUTH_TOKEN__ = data.token;
-        window.__WIDGET_BASE_URL__ = window.location.origin;
+        console.log('Token data:', data);
+        // Store token for widget to use (response field is 'bearerToken')
+        const token = data.bearerToken;
+        window.__WIDGET_AUTH_TOKEN__ = token;
+        window.__WIDGET_BASE_URL__ = parentOrigin;
 
         // Load widget via iframe instead (bypasses CORS for scripts)
         const iframe = document.createElement('iframe');
@@ -39,12 +47,46 @@
         document.body.innerHTML = '';
         document.body.appendChild(iframe);
 
+        // Set up API proxy - iframe sends requests, we make them same-origin
+        window.addEventListener('message', async (event) => {
+          if (event.data.type === 'API_REQUEST') {
+            try {
+              const response = await fetch(`${parentOrigin}/api/${event.data.path}`, {
+                method: event.data.method || 'GET',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': event.data.contentType || 'application/json',
+                  ...event.data.headers
+                },
+                body: event.data.body ? (typeof event.data.body === 'string' ? event.data.body : JSON.stringify(event.data.body)) : undefined
+              });
+
+              const responseData = await response.json();
+
+              iframe.contentWindow.postMessage({
+                type: 'API_RESPONSE',
+                requestId: event.data.requestId,
+                ok: response.ok,
+                status: response.status,
+                data: responseData
+              }, 'https://7ae0-50-47-231-156.ngrok-free.app');
+            } catch (err) {
+              iframe.contentWindow.postMessage({
+                type: 'API_RESPONSE',
+                requestId: event.data.requestId,
+                ok: false,
+                error: err.message
+              }, 'https://7ae0-50-47-231-156.ngrok-free.app');
+            }
+          }
+        });
+
         // Pass token to iframe when it loads
         iframe.onload = () => {
           iframe.contentWindow.postMessage({
             type: 'WIDGET_AUTH',
-            token: data.token,
-            baseUrl: window.location.origin
+            token: token,
+            baseUrl: parentOrigin
           }, 'https://7ae0-50-47-231-156.ngrok-free.app');
         };
       })

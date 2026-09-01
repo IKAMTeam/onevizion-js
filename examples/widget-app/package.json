@@ -10,11 +10,23 @@
   },
   "dependencies": {
     "@onevizion/sdk": "workspace:*",
+    "@tailwindcss/typography": "^0.5.20",
+    "@untitledui/icons": "^0.0.22",
+    "ag-grid-community": "^36.1.0",
+    "ag-grid-react": "^36.1.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-aria-components": "^1.20.0",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-react-aria-components": "^2.2.0"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
     "vite": "^6.0.7"
   }
 }
