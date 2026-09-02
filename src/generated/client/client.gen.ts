@@ -73,7 +73,8 @@ export const createClient = (config: Config = {}): Client => {
     return { opts: resolvedOpts, url };
   };
 
-  const request: Client['request'] = async (options) => {
+  // Type assertion needed due to complex conditional return types in generated code
+  const request = (async (options) => {
     const throwOnError = options.throwOnError ?? _config.throwOnError;
     const responseStyle = options.responseStyle ?? _config.responseStyle;
 
@@ -242,7 +243,7 @@ export const createClient = (config: Config = {}): Client => {
             response,
           };
     }
-  };
+  }) as Client['request'];
 
   const makeMethodFn = (method: Uppercase<HttpMethod>) => (options: RequestOptions) =>
     request({ ...options, method });

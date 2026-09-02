@@ -48,3 +48,41 @@ export function useOneVizionMutation<TData = unknown, TVariables = void>(
     ...options,
   });
 }
+
+/**
+ * Create trackor mutation
+ */
+export function useCreateTrackor(
+  options?: Omit<
+    UseMutationOptions<
+      unknown,
+      Error,
+      { trackorType: string; fields: Record<string, unknown> }
+    >,
+    'mutationFn'
+  >,
+) {
+  const client = useOneVizionClient();
+
+  return useMutation({
+    mutationFn: ({ trackorType, fields }) => client.trackors.create(trackorType, fields),
+    ...options,
+  });
+}
+
+/**
+ * Update trackor mutation
+ */
+export function useUpdateTrackor(
+  options?: Omit<
+    UseMutationOptions<unknown, Error, { id: number; data: { fields: Record<string, unknown> } }>,
+    'mutationFn'
+  >,
+) {
+  const client = useOneVizionClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }) => client.trackors.update(id, data.fields),
+    ...options,
+  });
+}

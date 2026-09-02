@@ -43,3 +43,75 @@ export function useOneVizionQuery<TData = unknown>(
     ...options,
   });
 }
+
+/**
+ * Get single trackor by ID
+ */
+export function useTrackor(
+  id: number,
+  options?: { fields?: string[] } & Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>
+) {
+  const client = useOneVizionClient();
+  const fields = options?.fields;
+
+  return useQuery({
+    queryKey: ['trackor', id, fields],
+    queryFn: () => client.trackors.get(id, fields),
+    ...options,
+  });
+}
+
+/**
+ * Search trackors
+ */
+export function useTrackorSearch(
+  trackorType: string,
+  conditions: string,
+  searchOptions?: { perPage?: number; page?: number; fields?: string[] },
+  queryOptions?: Omit<UseQueryOptions<unknown[], Error>, 'queryKey' | 'queryFn'>,
+) {
+  const client = useOneVizionClient();
+
+  return useQuery({
+    queryKey: ['trackors', 'search', trackorType, conditions, searchOptions],
+    queryFn: () => client.trackors.search(trackorType, conditions, searchOptions),
+    ...queryOptions,
+  });
+}
+
+/**
+ * Get trackor type tree
+ */
+export function useTrackorTree(options?: Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>) {
+  const client = useOneVizionClient();
+
+  return useQuery({
+    queryKey: ['trackors', 'tree'],
+    queryFn: () => client.trackors.getTree(),
+    ...options,
+  });
+}
+
+/**
+ * List trackors
+ */
+export function useTrackors(
+  options?: {
+    filters?: {
+      trackorType?: string;
+      status?: string;
+      page?: number;
+      perPage?: number;
+      fields?: Record<string, unknown>;
+    };
+  } & Omit<UseQueryOptions<unknown[], Error>, 'queryKey' | 'queryFn'>
+) {
+  const client = useOneVizionClient();
+  const filters = options?.filters;
+
+  return useQuery({
+    queryKey: ['trackors', 'list', filters],
+    queryFn: () => client.trackors.list(filters || {}),
+    ...options,
+  });
+}

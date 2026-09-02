@@ -31,15 +31,16 @@ describe('Trackors Integration', () => {
     const firstType = tree.children?.[0]?.name || tree.name;
     const trackors = await client.trackors.search(firstType, '', { perPage: 1 });
 
-    if (trackors.length === 0) {
+    if (trackors.length === 0 || !trackors[0]) {
       console.log('No trackors found, skipping get test');
       return;
     }
 
-    const trackor = await client.trackors.get(trackors[0].id);
+    const firstTrackor = trackors[0];
+    const trackor = await client.trackors.get(firstTrackor.id);
 
     expect(trackor).toBeDefined();
-    expect(trackor.id).toBe(trackors[0].id);
+    expect(trackor.id).toBe(firstTrackor.id);
     expect(trackor.trackorType).toBeDefined();
   });
 });

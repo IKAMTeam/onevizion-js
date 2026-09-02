@@ -2,6 +2,8 @@ import type { AuthProvider, OneVizionConfig } from './types/index.js';
 import { client as generatedClient } from './generated/client.gen.js';
 import type { Client } from './generated/client/types.gen.js';
 import type { Auth } from './generated/core/auth.gen.js';
+import { TrackorsClient } from './core/trackors.js';
+import { HttpClient } from './utils/http-client.js';
 
 /**
  * OneVizion SDK Client
@@ -11,10 +13,14 @@ import type { Auth } from './generated/core/auth.gen.js';
 export class OneVizionClient {
   private client: Client;
   private auth: AuthProvider;
+  private httpClient: HttpClient;
+
+  public readonly trackors: TrackorsClient;
 
   constructor(config: OneVizionConfig) {
     this.auth = config.auth;
     this.client = generatedClient;
+    this.httpClient = new HttpClient(config);
 
     // Configure the generated client with auth callback
     this.client.setConfig({
@@ -28,6 +34,9 @@ export class OneVizionClient {
         return token;
       },
     });
+
+    // Initialize domain clients
+    this.trackors = new TrackorsClient(this.httpClient);
   }
 
   /**
