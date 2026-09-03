@@ -15,37 +15,37 @@ import { OneVizionClient, credentialsAuth } from '../../src/index.js';
  */
 
 export const INTEGRATION_ENABLED = !!(
-  process.env.ONEVIZION_BASE_URL &&
-  (process.env.ONEVIZION_API_TOKEN ||
-    (process.env.ONEVIZION_USERNAME && process.env.ONEVIZION_PASSWORD))
+  process.env['ONEVIZION_BASE_URL'] &&
+  (process.env['ONEVIZION_API_TOKEN'] ||
+    (process.env['ONEVIZION_USERNAME'] && process.env['ONEVIZION_PASSWORD']))
 );
 
 export function createTestClient(): OneVizionClient {
-  if (!process.env.ONEVIZION_BASE_URL) {
+  if (!process.env['ONEVIZION_BASE_URL']) {
     throw new Error('ONEVIZION_BASE_URL is required');
   }
 
-  const baseUrl = process.env.ONEVIZION_BASE_URL;
+  const baseUrl = process.env['ONEVIZION_BASE_URL'];
 
   // Token auth
-  if (process.env.ONEVIZION_API_TOKEN) {
+  if (process.env['ONEVIZION_API_TOKEN']) {
     return new OneVizionClient({
       baseUrl,
       auth: {
-        getToken: async () => process.env.ONEVIZION_API_TOKEN ?? null,
-        isAuthenticated: async () => !!process.env.ONEVIZION_API_TOKEN,
+        getToken: async () => process.env['ONEVIZION_API_TOKEN'] ?? null,
+        isAuthenticated: async () => !!process.env['ONEVIZION_API_TOKEN'],
       },
     });
   }
 
   // Credentials auth
-  if (process.env.ONEVIZION_USERNAME && process.env.ONEVIZION_PASSWORD) {
+  if (process.env['ONEVIZION_USERNAME'] && process.env['ONEVIZION_PASSWORD']) {
     return new OneVizionClient({
       baseUrl,
       auth: credentialsAuth({
         baseUrl,
-        username: process.env.ONEVIZION_USERNAME,
-        password: process.env.ONEVIZION_PASSWORD,
+        username: process.env['ONEVIZION_USERNAME'],
+        password: process.env['ONEVIZION_PASSWORD'],
       }),
     });
   }
