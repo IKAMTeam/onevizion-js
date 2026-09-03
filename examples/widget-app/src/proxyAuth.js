@@ -21,15 +21,18 @@ export class ProxyAuth {
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, resolve);
 
-      window.parent.postMessage({
-        type: 'API_REQUEST',
-        requestId,
-        path,
-        method: options.method || 'GET',
-        headers: options.headers,
-        body: options.body,
-        contentType: options.contentType
-      }, '*');
+      window.parent.postMessage(
+        {
+          type: 'API_REQUEST',
+          requestId,
+          path,
+          method: options.method || 'GET',
+          headers: options.headers,
+          body: options.body,
+          contentType: options.contentType,
+        },
+        '*',
+      );
 
       // Timeout after 30s
       setTimeout(() => {

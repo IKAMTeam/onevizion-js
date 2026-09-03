@@ -49,7 +49,7 @@ export function useOneVizionQuery<TData = unknown>(
  */
 export function useTrackor(
   id: number,
-  options?: { fields?: string[] } & Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>
+  options?: { fields?: string[] } & Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>,
 ) {
   const client = useOneVizionClient();
   const fields = options?.fields;
@@ -82,7 +82,9 @@ export function useTrackorSearch(
 /**
  * Get trackor type tree
  */
-export function useTrackorTree(options?: Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>) {
+export function useTrackorTree(
+  options?: Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>,
+) {
   const client = useOneVizionClient();
 
   return useQuery({
@@ -104,7 +106,7 @@ export function useTrackors(
       perPage?: number;
       fields?: Record<string, unknown>;
     };
-  } & Omit<UseQueryOptions<unknown[], Error>, 'queryKey' | 'queryFn'>
+  } & Omit<UseQueryOptions<unknown[], Error>, 'queryKey' | 'queryFn'>,
 ) {
   const client = useOneVizionClient();
   const filters = options?.filters;

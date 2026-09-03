@@ -267,7 +267,9 @@ export const createClient = (config: Config = {}): Client => {
       ...(opts.window !== undefined && { window: opts.window }),
       ...(body !== undefined && { body }),
       method,
-      ...(opts.responseTransformer !== undefined && { responseTransformer: opts.responseTransformer }),
+      ...(opts.responseTransformer !== undefined && {
+        responseTransformer: opts.responseTransformer,
+      }),
       ...(opts.responseValidator !== undefined && { responseValidator: opts.responseValidator }),
       onRequest: async (url, init) => {
         let request = new Request(url, init);
@@ -279,8 +281,12 @@ export const createClient = (config: Config = {}): Client => {
         return request;
       },
       ...(serializedBody !== undefined && { serializedBody }),
-      ...(opts.sseDefaultRetryDelay !== undefined && { sseDefaultRetryDelay: opts.sseDefaultRetryDelay }),
-      ...(opts.sseMaxRetryAttempts !== undefined && { sseMaxRetryAttempts: opts.sseMaxRetryAttempts }),
+      ...(opts.sseDefaultRetryDelay !== undefined && {
+        sseDefaultRetryDelay: opts.sseDefaultRetryDelay,
+      }),
+      ...(opts.sseMaxRetryAttempts !== undefined && {
+        sseMaxRetryAttempts: opts.sseMaxRetryAttempts,
+      }),
       ...(opts.sseMaxRetryDelay !== undefined && { sseMaxRetryDelay: opts.sseMaxRetryDelay }),
       url,
     });

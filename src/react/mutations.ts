@@ -54,11 +54,7 @@ export function useOneVizionMutation<TData = unknown, TVariables = void>(
  */
 export function useCreateTrackor(
   options?: Omit<
-    UseMutationOptions<
-      unknown,
-      Error,
-      { trackorType: string; fields: Record<string, unknown> }
-    >,
+    UseMutationOptions<unknown, Error, { trackorType: string; fields: Record<string, unknown> }>,
     'mutationFn'
   >,
 ) {

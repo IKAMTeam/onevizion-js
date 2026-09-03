@@ -1,8 +1,8 @@
-import type { AuthProvider, OneVizionConfig } from './types/index.js';
+import { TrackorsClient } from './core/trackors.js';
 import { client as generatedClient } from './generated/client.gen.js';
 import type { Client } from './generated/client/types.gen.js';
 import type { Auth } from './generated/core/auth.gen.js';
-import { TrackorsClient } from './core/trackors.js';
+import type { AuthProvider, OneVizionConfig } from './types/index.js';
 import { HttpClient } from './utils/http-client.js';
 
 /**

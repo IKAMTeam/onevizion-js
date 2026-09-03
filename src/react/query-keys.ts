@@ -15,6 +15,8 @@ import type { QueryKey } from '@tanstack/react-query';
 /**
  * Create a type-safe query key
  */
-export function createQueryKey(...parts: readonly (string | number | object | undefined)[]): QueryKey {
+export function createQueryKey(
+  ...parts: readonly (string | number | object | undefined)[]
+): QueryKey {
   return parts.filter((p) => p !== undefined) as QueryKey;
 }

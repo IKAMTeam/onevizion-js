@@ -15,8 +15,13 @@ export class ProxyHttpClient {
           if (event.data.ok) {
             pending.resolve(event.data.data);
           } else {
-            const errorMsg = event.data.error || event.data.data || `Request failed with status ${event.data.status}`;
-            pending.reject(new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)));
+            const errorMsg =
+              event.data.error ||
+              event.data.data ||
+              `Request failed with status ${event.data.status}`;
+            pending.reject(
+              new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)),
+            );
           }
         }
       }
@@ -30,15 +35,18 @@ export class ProxyHttpClient {
       this.pendingRequests.set(requestId, { resolve, reject });
 
       // Send API request to parent loader
-      window.parent.postMessage({
-        type: 'API_REQUEST',
-        requestId,
-        path,
-        method,
-        headers: options.headers,
-        body: options.body,
-        contentType: options.contentType
-      }, '*');
+      window.parent.postMessage(
+        {
+          type: 'API_REQUEST',
+          requestId,
+          path,
+          method,
+          headers: options.headers,
+          body: options.body,
+          contentType: options.contentType,
+        },
+        '*',
+      );
 
       // Timeout after 30s
       setTimeout(() => {

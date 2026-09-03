@@ -32,7 +32,6 @@ describe('Trackors Integration', () => {
     const trackors = await client.trackors.search(firstType, '', { perPage: 1 });
 
     if (trackors.length === 0 || !trackors[0]) {
-      console.log('No trackors found, skipping get test');
       return;
     }
 

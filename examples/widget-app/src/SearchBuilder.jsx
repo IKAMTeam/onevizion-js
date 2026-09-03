@@ -2,9 +2,17 @@ import { OneVizionClient, search } from '@onevizion/sdk';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import { SearchLg, PlusCircle, XClose } from '@untitledui/icons';
+import { PlusCircle, SearchLg, XClose } from '@untitledui/icons';
 import { useEffect, useState } from 'react';
-import { ComboBox, Input, Label, ListBox, ListBoxItem, Popover, Button as AriaButton } from 'react-aria-components';
+import {
+  Button as AriaButton,
+  ComboBox,
+  Input,
+  Label,
+  ListBox,
+  ListBoxItem,
+  Popover,
+} from 'react-aria-components';
 import { ProxyHttpClient } from './proxyHttpClient';
 
 // Flatten tree into list of trackor types
@@ -47,12 +55,13 @@ export function SearchBuilder() {
               const path = `v3/trackor_types/${trackorType}/trackors/search${params.toString() ? '?' + params : ''}`;
               const searchExpression = typeof query === 'string' ? query : query.toString();
               return proxyHttp.post(path, searchExpression, { contentType: 'text/plain' });
-            }
+            },
           },
           trackorTypes: {
             getViews: (trackorType) => proxyHttp.get(`v3/trackor_types/${trackorType}/views`),
-            getView: (trackorType, viewName) => proxyHttp.get(`v3/trackor_types/${trackorType}/views/${viewName}`)
-          }
+            getView: (trackorType, viewName) =>
+              proxyHttp.get(`v3/trackor_types/${trackorType}/views/${viewName}`),
+          },
         };
         setClient(newClient);
       }
@@ -112,14 +121,30 @@ export function SearchBuilder() {
         conditions.forEach((c, i) => {
           if (i > 0) query = query.and();
           switch (c.operator) {
-            case 'equal': query = query.equal(c.field, c.value); break;
-            case 'notEqual': query = query.notEqual(c.field, c.value); break;
-            case 'greater': query = query.greater(c.field, parseFloat(c.value) || c.value); break;
-            case 'less': query = query.less(c.field, parseFloat(c.value) || c.value); break;
-            case 'isNull': query = query.isNull(c.field); break;
-            case 'isNotNull': query = query.isNotNull(c.field); break;
-            case 'thisWeek': query = query.thisWeek(c.field); break;
-            case 'thisMonth': query = query.thisMonth(c.field); break;
+            case 'equal':
+              query = query.equal(c.field, c.value);
+              break;
+            case 'notEqual':
+              query = query.notEqual(c.field, c.value);
+              break;
+            case 'greater':
+              query = query.greater(c.field, parseFloat(c.value) || c.value);
+              break;
+            case 'less':
+              query = query.less(c.field, parseFloat(c.value) || c.value);
+              break;
+            case 'isNull':
+              query = query.isNull(c.field);
+              break;
+            case 'isNotNull':
+              query = query.isNotNull(c.field);
+              break;
+            case 'thisWeek':
+              query = query.thisWeek(c.field);
+              break;
+            case 'thisMonth':
+              query = query.thisMonth(c.field);
+              break;
           }
         });
       } else {
@@ -136,14 +161,14 @@ export function SearchBuilder() {
   };
 
   // AG Grid columns
-  const columns = results[0]?.fields ?
-    Object.keys(results[0].fields).map(key => ({
-      field: `fields.${key}`,
-      headerName: key,
-      sortable: true,
-      filter: true,
-      resizable: true,
-    }))
+  const columns = results[0]?.fields
+    ? Object.keys(results[0].fields).map((key) => ({
+        field: `fields.${key}`,
+        headerName: key,
+        sortable: true,
+        filter: true,
+        resizable: true,
+      }))
     : [];
 
   if (!client) {
@@ -262,7 +287,9 @@ export function SearchBuilder() {
               )}
 
               {/* Add Button */}
-              <div className={`${!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) ? 'col-span-1' : 'col-span-5'} flex items-end`}>
+              <div
+                className={`${!['isNull', 'isNotNull', 'thisWeek', 'thisMonth'].includes(operator) ? 'col-span-1' : 'col-span-5'} flex items-end`}
+              >
                 <button
                   onClick={addCondition}
                   className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 font-medium"
@@ -278,9 +305,14 @@ export function SearchBuilder() {
               <div className="space-y-2 mb-6">
                 <div className="text-sm font-medium text-gray-700 mb-3">Active Conditions:</div>
                 {conditions.map((c, i) => (
-                  <div key={i} className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg"
+                  >
                     {i > 0 && <span className="text-sm font-semibold text-blue-600 px-2">AND</span>}
-                    <code className="flex-1 text-sm font-mono text-gray-800">{c.field} {c.operator} {c.value}</code>
+                    <code className="flex-1 text-sm font-mono text-gray-800">
+                      {c.field} {c.operator} {c.value}
+                    </code>
                     <button
                       onClick={() => removeCondition(i)}
                       className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -307,10 +339,11 @@ export function SearchBuilder() {
         {/* Results Grid */}
         {results.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Results ({results.length})
-            </h3>
-            <div className="ag-theme-alpine rounded-lg overflow-hidden" style={{ height: 500, width: '100%' }}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Results ({results.length})</h3>
+            <div
+              className="ag-theme-alpine rounded-lg overflow-hidden"
+              style={{ height: 500, width: '100%' }}
+            >
               <AgGridReact
                 rowData={results}
                 columnDefs={columns}

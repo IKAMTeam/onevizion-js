@@ -129,7 +129,7 @@ export class TrackorsClient {
   ): Promise<Trackor> {
     const body =
       typeof inputOrType === 'string'
-        ? { trackorType: inputOrType, fields: fields! }
+        ? { trackorType: inputOrType, fields: fields ?? {} }
         : inputOrType;
 
     return this.http.post<Trackor>('/v3/trackors', body);
