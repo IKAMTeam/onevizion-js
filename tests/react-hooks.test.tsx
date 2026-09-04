@@ -322,7 +322,7 @@ describe('Additional Query Hooks', () => {
 
       expect(result.current.data).toEqual(mockTree);
       const request = fetchMock.mock.calls[0]?.[0] as Request;
-      expect(request.url).toContain('/api/v3/trackor_tree');
+      expect(request.url).toContain('/api/v3/trackors/tree');
     });
   });
 
@@ -346,7 +346,7 @@ describe('Additional Query Hooks', () => {
 
       expect(result.current.data).toEqual(mockResults);
       const request = fetchMock.mock.calls[0]?.[0] as Request;
-      expect(request.url).toContain('/api/v3/trackor_types/ASSET/trackors/search');
+      expect(request.url).toContain('/api/v3/trackors/search');
     });
   });
 });

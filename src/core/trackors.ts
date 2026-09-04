@@ -52,7 +52,7 @@ export class TrackorsClient {
     }
 
     const query = params.toString();
-    const url = `/v3/trackors/${id}${query ? `?${query}` : ''}`;
+    const url = `v3/trackors/${id}${query ? `?${query}` : ''}`;
 
     return this.http.get<Trackor>(url);
   }
@@ -82,7 +82,7 @@ export class TrackorsClient {
     }
 
     const query = params.toString();
-    return this.http.get<Trackor[]>(`/v3/trackors${query ? `?${query}` : ''}`);
+    return this.http.get<Trackor[]>(`v3/trackors${query ? `?${query}` : ''}`);
   }
 
   /**
@@ -108,14 +108,14 @@ export class TrackorsClient {
       params.set('fields', options.fields.join(','));
     }
 
-    return this.http.get<Trackor[]>(`/v3/trackors/search?${params.toString()}`);
+    return this.http.get<Trackor[]>(`v3/trackors/search?${params.toString()}`);
   }
 
   /**
    * Get trackor type tree (hierarchy)
    */
   async getTree(): Promise<TrackorTreeNode> {
-    return this.http.get<TrackorTreeNode>('/v3/trackors/tree');
+    return this.http.get<TrackorTreeNode>('v3/trackors/tree');
   }
 
   /**
@@ -132,27 +132,27 @@ export class TrackorsClient {
         ? { trackorType: inputOrType, fields: fields ?? {} }
         : inputOrType;
 
-    return this.http.post<Trackor>('/v3/trackors', body);
+    return this.http.post<Trackor>('v3/trackors', body);
   }
 
   /**
    * Update a trackor
    */
   async update(id: number, fields: Record<string, unknown>): Promise<Trackor> {
-    return this.http.put<Trackor>(`/v3/trackors/${id}`, { fields });
+    return this.http.put<Trackor>(`v3/trackors/${id}`, { fields });
   }
 
   /**
    * Batch update multiple trackors
    */
   async batchUpdate(updates: UpdateTrackorInput[]): Promise<Trackor[]> {
-    return this.http.post<Trackor[]>('/v3/trackors/batch', updates);
+    return this.http.post<Trackor[]>('v3/trackors/batch', updates);
   }
 
   /**
    * Delete a trackor
    */
   async delete(id: number): Promise<void> {
-    await this.http.delete(`/v3/trackors/${id}`);
+    await this.http.delete(`v3/trackors/${id}`);
   }
 }
