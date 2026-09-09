@@ -1,10 +1,9 @@
 import { describe, expect } from 'vitest';
-import { createTestClient, skipIfNoIntegration } from './setup.js';
+import { INTEGRATION_ENABLED, createTestClient, skipIfNoIntegration } from './setup.js';
 
 describe('Trackors Integration', () => {
-  const client = createTestClient();
-
   skipIfNoIntegration('should fetch trackor tree', async () => {
+    const client = createTestClient();
     const tree = await client.trackors.getTree();
 
     expect(tree).toBeDefined();
@@ -13,6 +12,7 @@ describe('Trackors Integration', () => {
   });
 
   skipIfNoIntegration('should search trackors', async () => {
+    const client = createTestClient();
     // Get first trackor type from tree
     const tree = await client.trackors.getTree();
     const firstType = tree.children?.[0]?.name || tree.name;
@@ -26,6 +26,7 @@ describe('Trackors Integration', () => {
   });
 
   skipIfNoIntegration('should get trackor by id', async () => {
+    const client = createTestClient();
     // Get first trackor from search
     const tree = await client.trackors.getTree();
     const firstType = tree.children?.[0]?.name || tree.name;
