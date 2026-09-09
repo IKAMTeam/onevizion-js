@@ -1,5 +1,5 @@
 import { describe, expect } from 'vitest';
-import { INTEGRATION_ENABLED, createTestClient, skipIfNoIntegration } from './setup.js';
+import { createTestClient, skipIfNoIntegration } from './setup.js';
 
 describe('Trackors Integration', () => {
   skipIfNoIntegration('should fetch trackor tree', async () => {
